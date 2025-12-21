@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons"
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import Constants from 'expo-constants'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   Image,
@@ -44,7 +44,7 @@ const MorningStockScreen = () => {
   const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
 
   const [products, setProducts] = useState<Product[]>([])
-  const [quantities, setQuantities] = useState<{[key: number]: string}>({})
+  const [quantities, setQuantities] = useState<{ [key: number]: string }>({})
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -77,7 +77,7 @@ const MorningStockScreen = () => {
         setProducts(validProducts)
 
         if (!isRefresh) {
-          const initial: {[key: number]: string} = {}
+          const initial: { [key: number]: string } = {}
           validProducts.forEach((p: Product) => {
             initial[p.inventory.inventoryId] = ''
           })
@@ -179,9 +179,9 @@ const MorningStockScreen = () => {
           }
         >
           {products.length === 0 ? (
-             <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No products available</Text>
-             </View>
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No products available</Text>
+            </View>
           ) : (
             products.map((product) => (
               <View key={product.inventory.inventoryId} style={styles.card}>
@@ -344,13 +344,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   input: {
-    width: 70,
-    height: 30,
+    width: 90,
+    height: 42,
     borderWidth: 1,
     borderColor: '#CAC4D0',
-    borderRadius: 4,
+    borderRadius: 6,
     textAlign: 'center',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: '#1E293B',
     backgroundColor: '#FFFFFF',
