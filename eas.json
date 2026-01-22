@@ -10,13 +10,13 @@
       },
       "preview": {
         "distribution": "internal",
-        "environment": {
+        "env": {
           "EXPO_PUBLIC_API_BASE_URL": "http://3.110.165.143:4000/api"
         }
       },
       "production": {
         "autoIncrement": true,
-        "environment": {
+        "env": {
           "EXPO_PUBLIC_API_BASE_URL": "https://theinfranova.com/api"
         }
       }

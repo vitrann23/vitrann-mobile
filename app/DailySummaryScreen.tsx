@@ -57,7 +57,7 @@ type DeliveryData = {
   productName: string 
 }
 
-const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
+const API_BASE_URL = 'http://192.168.1.7:3000/api';
 
 // API helper function
 const makeAuthenticatedRequest = async (url: string, options: RequestInit = {}) => {

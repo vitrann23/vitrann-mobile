@@ -1,0 +1,110 @@
+// Prisma Schema for Vitrann Mobile Backend
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  userId        Int      @id @default(autoincrement())
+  username      String   @unique
+  passwordHash  String
+  role          String   // "ADMIN", "MANAGER", "WORKER"
+  firstName     String?
+  lastName      String?
+  phoneNumber   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  worker        Worker?
+}
+
+model Worker {
+  workerId      Int      @id @default(autoincrement())
+  userId        Int      @unique
+  firstName     String
+  lastName      String
+  phoneNumber   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  user          User     @relation(fields: [userId], references: [userId])
+  inventory     WorkerInventory[]
+  deliveries    Delivery[]
+}
+
+model Product {
+  productId     Int      @id @default(autoincrement())
+  productName   String   @unique
+  price         Float
+  imageUrl      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  inventory     WorkerInventory[]
+  deliveryItems DeliveryItem[]
+}
+
+model WorkerInventory {
+  inventoryId   Int      @id @default(autoincrement())
+  workerId      Int
+  productId     Int
+  quantity      Int
+  date          DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  worker        Worker   @relation(fields: [workerId], references: [workerId])
+  product       Product  @relation(fields: [productId], references: [productId])
+}
+
+model Customer {
+  customerId      Int      @id @default(autoincrement())
+  customerName    String
+  address         String?
+  phoneNumber     String?
+  classification  String   @default("REGULAR") // "VIP", "REGULAR", "NEW"
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  deliveries      Delivery[]
+}
+
+model Delivery {
+  deliveryId    Int      @id @default(autoincrement())
+  workerId      Int
+  customerId    Int
+  deliveryDate  DateTime @default(now())
+  totalAmount   Float    @default(0)
+  isPaid        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  worker        Worker   @relation(fields: [workerId], references: [workerId])
+  customer      Customer @relation(fields: [customerId], references: [customerId])
+  items         DeliveryItem[]
+}
+
+model DeliveryItem {
+  itemId        Int      @id @default(autoincrement())
+  deliveryId    Int
+  productId     Int
+  quantity      Int
+  price         Float
+  
+  delivery      Delivery @relation(fields: [deliveryId], references: [deliveryId])
+  product       Product  @relation(fields: [productId], references: [productId])
+}
+
+model CashSubmission {
+  cashId        Int      @id @default(autoincrement())
+  workerId      Int
+  amount        Float
+  date          DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

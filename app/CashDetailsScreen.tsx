@@ -1,7 +1,6 @@
 "use client"
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import Constants from 'expo-constants'
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useMemo, useState } from "react"
 import {
@@ -35,7 +34,8 @@ const coins = [
   { label: "₹1", value: 1, color: "#87CEEB" },
 ]
 
-const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
+// Temporarily hardcoded for local development
+const API_BASE_URL = 'http://192.168.1.7:3000/api';
 
 // API function to submit total amount
 const submitTotalAmount = async (amount: number) => {
@@ -79,8 +79,12 @@ export default function CashDetailsScreen() {
 
   const maxCashAmount = params.maxCashAmount ? Number(params.maxCashAmount) : 0
 
-  const [noteCounts, setNoteCounts] = useState<Record<string, string>>({})
-  const [coinCounts, setCoinCounts] = useState<Record<string, string>>({})
+  const [noteCounts, setNoteCounts] = useState<Record<string, string>>(
+    notes.reduce((acc, note) => ({ ...acc, [note.label]: '0' }), {})
+  )
+  const [coinCounts, setCoinCounts] = useState<Record<string, string>>(
+    coins.reduce((acc, coin) => ({ ...acc, [coin.label]: '0' }), {})
+  )
   const [submitting, setSubmitting] = useState(false) // Loading state
 
   const computeTotal = (notesObj: Record<string, string>, coinsObj: Record<string, string>) => {
@@ -118,17 +122,6 @@ export default function CashDetailsScreen() {
   }
 
   const onNext = async () => {
-    // Validate that user has entered some amount
-    if (totalAmount <= 0) {
-      Toast.show({
-        type: 'error',
-        text1: 'Enter Cash Details',
-        text2: 'Please enter the cash amount collected',
-        visibilityTime: 3000,
-      })
-      return
-    }
-
     setSubmitting(true)
 
     try {
@@ -233,12 +226,11 @@ export default function CashDetailsScreen() {
           <TouchableOpacity 
             style={[
               styles.nextButton, 
-              submitting && styles.nextButtonDisabled,
-              totalAmount <= 0 && styles.nextButtonInactive
+              submitting && styles.nextButtonDisabled
             ]} 
             onPress={onNext} 
             activeOpacity={0.85}
-            disabled={submitting || totalAmount <= 0}
+            disabled={submitting}
           >
             {submitting ? (
               <View style={styles.loadingContainer}>
@@ -247,7 +239,7 @@ export default function CashDetailsScreen() {
               </View>
             ) : (
               <Text style={styles.nextButtonText}>
-                {totalAmount > 0 ? `Submit ₹${totalAmount}` : 'Enter Amount First'}
+                {totalAmount > 0 ? `Submit ₹${totalAmount}` : 'Submit ₹0'}
               </Text>
             )}
           </TouchableOpacity>

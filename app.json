@@ -44,7 +44,8 @@
       "router": {},
       "eas": {
         "projectId": "7b286b74-4544-49d7-85e7-1b169006119e"
-      }
+      },
+      "EXPO_PUBLIC_API_BASE_URL": "http://192.168.1.7:3000/api"
     }
   }
 }

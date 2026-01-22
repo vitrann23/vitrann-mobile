@@ -2,7 +2,6 @@
 
 import { Ionicons } from "@expo/vector-icons"
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import Constants from 'expo-constants'
 import { LinearGradient } from "expo-linear-gradient"
 import { useRouter } from "expo-router"
 import { useState } from "react"
@@ -22,7 +21,8 @@ import {
 } from "react-native"
 import Toast from 'react-native-toast-message'
 
-const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
+// Temporarily hardcoded for local development
+const API_BASE_URL = 'http://192.168.1.7:3000/api';
 
 interface WorkerLoginResponse {
   success: boolean
@@ -78,7 +78,9 @@ export default function Index() {
         }),
       });
 
+      console.log("Response status:", response.status);
       const data: WorkerLoginResponse = await response.json();
+      console.log("Response data:", JSON.stringify(data, null, 2));
 
       if (data.success === true && data.token && data.worker) {
         // Store authentication data

@@ -2,7 +2,6 @@
 
 import { Ionicons } from "@expo/vector-icons"
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import Constants from 'expo-constants'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
 import {
@@ -41,7 +40,8 @@ const MorningStockScreen = () => {
   const router = useRouter()
   const workerId = params.workerId as string
 
-  const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
+  // Temporarily hardcoded for local development
+  const API_BASE_URL = 'http://192.168.1.7:3000/api';
 
   const [products, setProducts] = useState<Product[]>([])
   const [quantities, setQuantities] = useState<{ [key: number]: string }>({})
@@ -79,7 +79,7 @@ const MorningStockScreen = () => {
         if (!isRefresh) {
           const initial: { [key: number]: string } = {}
           validProducts.forEach((p: Product) => {
-            initial[p.inventory.inventoryId] = ''
+            initial[p.productId] = ''
           })
           setQuantities(initial)
         }
@@ -117,8 +117,8 @@ const MorningStockScreen = () => {
       const token = await AsyncStorage.getItem('authToken')
       const pickItems = Object.entries(quantities)
         .filter(([_, qty]) => (parseInt(qty) || 0) > 0)
-        .map(([inventoryId, qty]) => ({
-          inventoryId: parseInt(inventoryId),
+        .map(([productId, qty]) => ({
+          productId: parseInt(productId),
           totalPickedQuantity: parseInt(qty)
         }))
 
@@ -184,7 +184,7 @@ const MorningStockScreen = () => {
             </View>
           ) : (
             products.map((product) => (
-              <View key={product.inventory.inventoryId} style={styles.card}>
+              <View key={product.productId} style={styles.card}>
                 <View style={styles.imageWrapper}>
                   {product.imageUrl ? (
                     <Image source={{ uri: product.imageUrl }} style={styles.productImage} resizeMode="contain" />
@@ -203,16 +203,16 @@ const MorningStockScreen = () => {
                   <TextInput
                     style={[
                       styles.input,
-                      (focusedInput === product.inventory.inventoryId || (parseInt(quantities[product.inventory.inventoryId] || '0') > 0)) && styles.inputActive
+                      (focusedInput === product.productId || (parseInt(quantities[product.productId] || '0') > 0)) && styles.inputActive
                     ]}
                     placeholder="0"
                     placeholderTextColor="#999"
                     keyboardType="numeric"
                     maxLength={3}
-                    value={quantities[product.inventory.inventoryId] ?? ''}
-                    onFocus={() => setFocusedInput(product.inventory.inventoryId)}
+                    value={quantities[product.productId] ?? ''}
+                    onFocus={() => setFocusedInput(product.productId)}
                     onBlur={() => setFocusedInput(null)}
-                    onChangeText={(text) => handleInputChange(product.inventory.inventoryId, text)}
+                    onChangeText={(text) => handleInputChange(product.productId, text)}
                     editable={!submitting}
                   />
                 </View>
