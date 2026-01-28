@@ -673,32 +673,6 @@ export default function CustomerDeliveryScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F5F7FA" />
-      
-      <View style={styles.headerRow}>
-        <TouchableOpacity 
-          style={styles.skipButton}
-          onPress={() => {
-            if (selectedIdx < customers.length - 1) {
-              setSelectedIdx(selectedIdx + 1)
-            } else {
-              router.push({
-                pathname: "/CashDetailsScreen",
-                params: {
-                  deliveryData: JSON.stringify(customers.map(c => ({
-                    customerId: c.customerId,
-                    deliveredItems: c.deliveredItems,
-                    paymentReceived: c.paymentReceived,
-                    deliveryConfirmed: c.deliveryConfirmed
-                  }))),
-                  totalPayments: customers.reduce((sum, cust) => sum + cust.paymentReceived, 0).toString(),
-                },
-              })
-            }
-          }}
-        >
-          <Text style={styles.skipButtonText}>Skip</Text>
-        </TouchableOpacity>
-      </View>
 
       <View style={styles.storeNameContainer}>
         <Text style={styles.storeName}>{customer.name}</Text>
@@ -735,6 +709,32 @@ export default function CustomerDeliveryScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
+      </View>
+
+      <View style={styles.skipButtonContainer}>
+        <TouchableOpacity 
+          style={styles.skipButton}
+          onPress={() => {
+            if (selectedIdx < customers.length - 1) {
+              setSelectedIdx(selectedIdx + 1)
+            } else {
+              router.push({
+                pathname: "/CashDetailsScreen",
+                params: {
+                  deliveryData: JSON.stringify(customers.map(c => ({
+                    customerId: c.customerId,
+                    deliveredItems: c.deliveredItems,
+                    paymentReceived: c.paymentReceived,
+                    deliveryConfirmed: c.deliveryConfirmed
+                  }))),
+                  totalPayments: customers.reduce((sum, cust) => sum + cust.paymentReceived, 0).toString(),
+                },
+              })
+            }
+          }}
+        >
+          <Text style={styles.skipButtonText}>Skip</Text>
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView style={styles.keyboardAvoidingView} behavior={Platform.OS === "ios" ? "padding" : "height"}>
@@ -1169,18 +1169,17 @@ const styles = StyleSheet.create({
   scrollViewContent: { 
     paddingBottom: 180 
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
+  skipButtonContainer: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   skipButton: {
     backgroundColor: '#EF4444',
     borderRadius: 8,
     paddingHorizontal: 20,
     paddingVertical: 10,
+    alignSelf: 'flex-start',
   },
   skipButtonText: {
     color: '#FFFFFF',
