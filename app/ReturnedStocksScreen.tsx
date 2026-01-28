@@ -51,7 +51,7 @@ type ProductItem = {
   isEdited: boolean
 }
 
-const API_BASE_URL = 'http://192.168.1.7:3000/api';
+const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
 
 
 // API helper function
@@ -109,6 +109,8 @@ export default function ReturnedStocksScreen() {
 
       const inventoryResponse = await makeAuthenticatedRequest('/daily-activity-ci/my-inventory')
 
+      console.log('Inventory response:', inventoryResponse)
+
       if (inventoryResponse.success && inventoryResponse.data) {
         setInventoryData(inventoryResponse.data)
         
@@ -133,16 +135,17 @@ export default function ReturnedStocksScreen() {
         })
 
       } else {
-        throw new Error('Failed to fetch inventory data')
+        throw new Error(inventoryResponse.message || 'Failed to fetch inventory data')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching inventory:', error)
-      setError('Failed to load inventory data')
+      const errorMessage = error.message || 'Failed to load inventory data'
+      setError(errorMessage)
       
       Toast.show({
         type: 'error',
         text1: 'Loading Failed',
-        text2: 'Unable to load inventory data',
+        text2: errorMessage,
         visibilityTime: 3000,
       })
     } finally {

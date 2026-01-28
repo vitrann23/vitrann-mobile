@@ -57,7 +57,7 @@ type DeliveryData = {
   productName: string 
 }
 
-const API_BASE_URL = 'http://192.168.1.7:3000/api';
+const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
 
 // API helper function
 const makeAuthenticatedRequest = async (url: string, options: RequestInit = {}) => {
@@ -144,6 +144,9 @@ export default function DailySummaryScreen() {
         makeAuthenticatedRequest('/deliveries/total-amount')
       ])
 
+      console.log('Inventory response:', inventoryResponse)
+      console.log('Cash response:', cashResponse)
+
       // Process inventory data
       if (inventoryResponse.success && inventoryResponse.data) {
         setInventoryData(inventoryResponse.data)
@@ -182,14 +185,15 @@ export default function DailySummaryScreen() {
         visibilityTime: 2000,
       })
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching summary data:', error)
-      setError('Failed to load summary data')
+      const errorMessage = error.message || 'Failed to load summary data'
+      setError(errorMessage)
       
       Toast.show({
         type: 'error',
         text1: 'Loading Failed',
-        text2: 'Unable to load summary data',
+        text2: errorMessage,
         visibilityTime: 3000,
       })
     } finally {

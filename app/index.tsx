@@ -22,7 +22,7 @@ import {
 import Toast from 'react-native-toast-message'
 
 // Temporarily hardcoded for local development
-const API_BASE_URL = 'http://192.168.1.7:3000/api';
+const API_BASE_URL = 'https://theinfranova.com/api';
 
 interface WorkerLoginResponse {
   success: boolean

@@ -2,6 +2,7 @@
 
 import { Ionicons } from "@expo/vector-icons"
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import Constants from 'expo-constants'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
 import {
@@ -40,8 +41,7 @@ const MorningStockScreen = () => {
   const router = useRouter()
   const workerId = params.workerId as string
 
-  // Temporarily hardcoded for local development
-  const API_BASE_URL = 'http://192.168.1.7:3000/api';
+  const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
 
   const [products, setProducts] = useState<Product[]>([])
   const [quantities, setQuantities] = useState<{ [key: number]: string }>({})
@@ -79,7 +79,7 @@ const MorningStockScreen = () => {
         if (!isRefresh) {
           const initial: { [key: number]: string } = {}
           validProducts.forEach((p: Product) => {
-            initial[p.productId] = ''
+            initial[p.inventory.inventoryId] = ''
           })
           setQuantities(initial)
         }
@@ -117,8 +117,8 @@ const MorningStockScreen = () => {
       const token = await AsyncStorage.getItem('authToken')
       const pickItems = Object.entries(quantities)
         .filter(([_, qty]) => (parseInt(qty) || 0) > 0)
-        .map(([productId, qty]) => ({
-          productId: parseInt(productId),
+        .map(([inventoryId, qty]) => ({
+          inventoryId: parseInt(inventoryId),
           totalPickedQuantity: parseInt(qty)
         }))
 
@@ -203,16 +203,16 @@ const MorningStockScreen = () => {
                   <TextInput
                     style={[
                       styles.input,
-                      (focusedInput === product.productId || (parseInt(quantities[product.productId] || '0') > 0)) && styles.inputActive
+                      (focusedInput === product.inventory.inventoryId || (parseInt(quantities[product.inventory.inventoryId] || '0') > 0)) && styles.inputActive
                     ]}
                     placeholder="0"
                     placeholderTextColor="#999"
                     keyboardType="numeric"
                     maxLength={3}
-                    value={quantities[product.productId] ?? ''}
-                    onFocus={() => setFocusedInput(product.productId)}
+                    value={quantities[product.inventory.inventoryId] ?? ''}
+                    onFocus={() => setFocusedInput(product.inventory.inventoryId)}
                     onBlur={() => setFocusedInput(null)}
-                    onChangeText={(text) => handleInputChange(product.productId, text)}
+                    onChangeText={(text) => handleInputChange(product.inventory.inventoryId, text)}
                     editable={!submitting}
                   />
                 </View>

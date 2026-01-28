@@ -1,8 +1,9 @@
 "use client"
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import Constants from 'expo-constants'
 import { useLocalSearchParams, useRouter } from "expo-router"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   ActivityIndicator,
   Image,
@@ -34,8 +35,45 @@ const coins = [
   { label: "₹1", value: 1, color: "#87CEEB" },
 ]
 
-// Temporarily hardcoded for local development
-const API_BASE_URL = 'http://192.168.1.7:3000/api';
+const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
+
+// API function to check for existing cash entry
+const checkExistingEntry = async () => {
+  try {
+    const token = await AsyncStorage.getItem('authToken')
+    if (!token) {
+      return { exists: false, data: null }
+    }
+
+    if (!API_BASE_URL) {
+      return { exists: false, data: null }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/deliveries/total-amount`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    if (response.status === 404) {
+      return { exists: false, data: null }
+    }
+
+    if (response.ok) {
+      const data = await response.json()
+      if (data.success && data.data) {
+        return { exists: true, data: data.data }
+      }
+    }
+    
+    return { exists: false, data: null }
+  } catch (error) {
+    console.error('Error checking existing entry:', error)
+    return { exists: false, data: null }
+  }
+}
 
 // API function to submit total amount
 const submitTotalAmount = async (amount: number) => {
@@ -60,11 +98,13 @@ const submitTotalAmount = async (amount: number) => {
       }),
     })
 
+    const data = await response.json()
+
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      const errorMessage = data.message || data.error || `HTTP error! status: ${response.status}`
+      throw new Error(errorMessage)
     }
 
-    const data = await response.json()
     return data
   } catch (error) {
     console.error('API request failed:', error)
@@ -79,13 +119,23 @@ export default function CashDetailsScreen() {
 
   const maxCashAmount = params.maxCashAmount ? Number(params.maxCashAmount) : 0
 
-  const [noteCounts, setNoteCounts] = useState<Record<string, string>>(
-    notes.reduce((acc, note) => ({ ...acc, [note.label]: '0' }), {})
-  )
-  const [coinCounts, setCoinCounts] = useState<Record<string, string>>(
-    coins.reduce((acc, coin) => ({ ...acc, [coin.label]: '0' }), {})
-  )
-  const [submitting, setSubmitting] = useState(false) // Loading state
+  const [noteCounts, setNoteCounts] = useState<Record<string, string>>({})
+  const [coinCounts, setCoinCounts] = useState<Record<string, string>>({})
+  const [submitting, setSubmitting] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [existingEntry, setExistingEntry] = useState<{ id: number; amount: number; date: string } | null>(null)
+
+  useEffect(() => {
+    const checkEntry = async () => {
+      setLoading(true)
+      const result = await checkExistingEntry()
+      if (result.exists && result.data) {
+        setExistingEntry(result.data)
+      }
+      setLoading(false)
+    }
+    checkEntry()
+  }, [])
 
   const computeTotal = (notesObj: Record<string, string>, coinsObj: Record<string, string>) => {
     let total = 0
@@ -122,6 +172,17 @@ export default function CashDetailsScreen() {
   }
 
   const onNext = async () => {
+    // Validate that user has entered some amount
+    if (totalAmount <= 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Enter Cash Details',
+        text2: 'Please enter the cash amount collected',
+        visibilityTime: 3000,
+      })
+      return
+    }
+
     setSubmitting(true)
 
     try {
@@ -180,10 +241,61 @@ export default function CashDetailsScreen() {
         placeholder="0"
         placeholderTextColor="#999"
         onChangeText={(val) => onChangeCount(type, item.label, val)}
-        editable={!submitting} // Disable during submission
+        editable={!submitting}
       />
     </View>
   )
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <View style={styles.loadingScreen}>
+          <ActivityIndicator size="large" color="#1e40af" />
+          <Text style={styles.loadingText}>Checking existing entries...</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  if (existingEntry) {
+    return (
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.messageContainer}>
+            <Text style={styles.messageIcon}>✅</Text>
+            <Text style={styles.messageTitle}>Hi, you have already submitted today's entry</Text>
+            <View style={styles.amountDisplay}>
+              <Text style={styles.amountLabel}>Submitted Amount</Text>
+              <Text style={styles.amountValue}>₹{existingEntry.amount}</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.continueButton}
+              onPress={() => {
+                router.push({
+                  pathname: "/ReturnedStocksScreen",
+                  params: { 
+                    ...params,
+                    submittedAmount: existingEntry.amount.toString()
+                  },
+                })
+              }}
+            >
+              <Text style={styles.continueButtonText}>Continue to Next Step →</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.backButtonAlt}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.backButtonText}>← Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    )
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -226,11 +338,12 @@ export default function CashDetailsScreen() {
           <TouchableOpacity 
             style={[
               styles.nextButton, 
-              submitting && styles.nextButtonDisabled
+              submitting && styles.nextButtonDisabled,
+              totalAmount <= 0 && styles.nextButtonInactive
             ]} 
             onPress={onNext} 
             activeOpacity={0.85}
-            disabled={submitting}
+            disabled={submitting || totalAmount <= 0}
           >
             {submitting ? (
               <View style={styles.loadingContainer}>
@@ -239,7 +352,7 @@ export default function CashDetailsScreen() {
               </View>
             ) : (
               <Text style={styles.nextButtonText}>
-                {totalAmount > 0 ? `Submit ₹${totalAmount}` : 'Submit ₹0'}
+                {totalAmount > 0 ? `Submit ₹${totalAmount}` : 'Enter Amount First'}
               </Text>
             )}
           </TouchableOpacity>
@@ -406,5 +519,87 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  loadingScreen: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#64748b",
+    fontWeight: "600",
+  },
+  messageContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  messageIcon: {
+    fontSize: 80,
+    marginBottom: 24,
+  },
+  messageTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#1e293b",
+    textAlign: "center",
+    marginBottom: 40,
+    paddingHorizontal: 20,
+    lineHeight: 32,
+  },
+  amountDisplay: {
+    backgroundColor: "#ffffff",
+    borderRadius: 20,
+    padding: 32,
+    alignItems: "center",
+    marginBottom: 40,
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: "#d1fae5",
+    minWidth: 280,
+  },
+  amountLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#64748b",
+    marginBottom: 12,
+  },
+  amountValue: {
+    fontSize: 48,
+    fontWeight: "900",
+    color: "#10b981",
+  },
+  continueButton: {
+    backgroundColor: "#10b981",
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 40,
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    marginBottom: 16,
+  },
+  continueButtonText: {
+    color: "#ffffff",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  backButtonAlt: {
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+  },
+  backButtonText: {
+    color: "#64748b",
+    fontSize: 16,
+    fontWeight: "700",
   },
 })
