@@ -259,40 +259,37 @@ export default function CashDetailsScreen() {
 
   if (existingEntry) {
     return (
-      <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView
-          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.messageContainer}>
-            <Text style={styles.messageIcon}>✅</Text>
-            <Text style={styles.messageTitle}>Hi, you have already submitted today's entry</Text>
-            <View style={styles.amountDisplay}>
-              <Text style={styles.amountLabel}>Submitted Amount</Text>
-              <Text style={styles.amountValue}>₹{existingEntry.amount}</Text>
+      <SafeAreaView style={styles.alreadySubmittedContainer} edges={["top"]}>
+        <View style={styles.alreadySubmittedContent}>
+          <Text style={styles.heyTitle}>Hey!</Text>
+          
+          <View style={styles.checkmarkRow}>
+            <View style={styles.checkmarkCircle}>
+              <Text style={styles.checkmarkIcon}>✓</Text>
             </View>
-            <TouchableOpacity 
-              style={styles.continueButton}
-              onPress={() => {
-                router.push({
-                  pathname: "/ReturnedStocksScreen",
-                  params: { 
-                    ...params,
-                    submittedAmount: existingEntry.amount.toString()
-                  },
-                })
-              }}
-            >
-              <Text style={styles.continueButtonText}>Continue to Next Step →</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.backButtonAlt}
-              onPress={() => router.back()}
-            >
-              <Text style={styles.backButtonText}>← Go Back</Text>
-            </TouchableOpacity>
+            <Text style={styles.alreadySubmittedText}>
+              You have already submitted{'\n'}today's entry.
+            </Text>
           </View>
-        </ScrollView>
+
+          <View style={styles.submittedCard}>
+            <View style={styles.checkmarkBadge}>
+              <Text style={styles.checkmarkBadgeIcon}>✓</Text>
+            </View>
+            <Text style={styles.submittedLabel}>Submitted Amount</Text>
+            <Text style={styles.submittedAmount}>₹{existingEntry.amount}</Text>
+          </View>
+
+          <Text style={styles.seeYouText}>See you again tomorrow.</Text>
+
+          <TouchableOpacity 
+            style={styles.goBackButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.goBackIcon}>←</Text>
+            <Text style={styles.goBackButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     )
   }
@@ -531,75 +528,127 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontWeight: "600",
   },
-  messageContainer: {
+  alreadySubmittedContainer: {
+    flex: 1,
+    backgroundColor: "#F3F4F6",
+  },
+  alreadySubmittedContent: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 60,
+    paddingHorizontal: 24,
+    paddingVertical: 40,
   },
-  messageIcon: {
-    fontSize: 80,
-    marginBottom: 24,
+  heyTitle: {
+    fontSize: 56,
+    fontWeight: "800",
+    color: "#6B21A8",
+    marginBottom: 32,
+    letterSpacing: -1,
   },
-  messageTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#1e293b",
-    textAlign: "center",
-    marginBottom: 40,
-    paddingHorizontal: 20,
-    lineHeight: 32,
-  },
-  amountDisplay: {
-    backgroundColor: "#ffffff",
-    borderRadius: 20,
-    padding: 32,
+  checkmarkRow: {
+    flexDirection: "row",
     alignItems: "center",
     marginBottom: 40,
-    shadowColor: "#10b981",
+    gap: 12,
+  },
+  checkmarkCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#3B82F6",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  checkmarkIcon: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  alreadySubmittedText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#4B5563",
+    textAlign: "left",
+    lineHeight: 26,
+  },
+  submittedCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 40,
+    alignItems: "center",
+    marginBottom: 32,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 6,
-    borderWidth: 2,
-    borderColor: "#d1fae5",
-    minWidth: 280,
+    borderWidth: 1,
+    borderColor: "#D1FAE5",
+    minWidth: 320,
+    position: "relative",
   },
-  amountLabel: {
-    fontSize: 16,
+  checkmarkBadge: {
+    position: "absolute",
+    top: -24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#EC4899",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#EC4899",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  checkmarkBadgeIcon: {
+    color: "#FFFFFF",
+    fontSize: 32,
+    fontWeight: "700",
+  },
+  submittedLabel: {
+    fontSize: 18,
     fontWeight: "600",
-    color: "#64748b",
+    color: "#9CA3AF",
+    marginTop: 24,
     marginBottom: 12,
   },
-  amountValue: {
-    fontSize: 48,
+  submittedAmount: {
+    fontSize: 56,
     fontWeight: "900",
-    color: "#10b981",
+    color: "#10B981",
+    letterSpacing: -2,
   },
-  continueButton: {
-    backgroundColor: "#10b981",
+  seeYouText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#9CA3AF",
+    marginBottom: 40,
+  },
+  goBackButton: {
+    backgroundColor: "#6B21A8",
     borderRadius: 16,
     paddingVertical: 18,
-    paddingHorizontal: 40,
-    shadowColor: "#10b981",
+    paddingHorizontal: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    shadowColor: "#6B21A8",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
-    marginBottom: 16,
   },
-  continueButtonText: {
-    color: "#ffffff",
+  goBackIcon: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  goBackButtonText: {
+    color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "800",
-  },
-  backButtonAlt: {
-    paddingVertical: 16,
-    paddingHorizontal: 40,
-  },
-  backButtonText: {
-    color: "#64748b",
-    fontSize: 16,
-    fontWeight: "700",
   },
 })
