@@ -291,64 +291,81 @@ export default function DailySummaryScreen() {
   return (
     <SafeAreaView style={styles.pageBackground}>
       <ScrollView contentContainerStyle={styles.wrapper}>
-        <Text style={styles.heading}>📊 Daily Summary</Text>
-
-        {/* Picked/Sent Section */}
-        <View style={styles.sectionBox}>
-          <Text style={styles.sectionLabel}>📦 Picked/Sent:</Text>
-          {formatSummaryRows(pickedSummary)}
-          <Text style={styles.totalText}>Total: {totalPackets(pickedSummary)} packets</Text>
+        <View style={styles.headerContainer}>
+          <Text style={styles.heading}>Summary</Text>
+          <TouchableOpacity style={styles.previewButton}>
+            <Text style={styles.previewButtonText}>Preview</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Delivered Section */}
-        <View style={styles.sectionBox}>
-          <Text style={styles.sectionLabel}>🚚 Delivered:</Text>
-          {formatSummaryRows(deliveredSummary)}
-          <Text style={styles.totalText}>Total: {totalPackets(deliveredSummary)} packets</Text>
-        </View>
-
-        {/* Remaining Section */}
-        <View style={styles.sectionBox}>
-          <Text style={styles.sectionLabel}>📋 Remaining:</Text>
-          {formatSummaryRows(remainingSummary)}
-          <Text style={styles.totalText}>Total: {totalPackets(remainingSummary)} packets</Text>
-        </View>
-
-        {/* ✅ UPDATED: Enhanced Cash Collection Section */}
-        <View style={[styles.sectionBox, styles.paymentsBox]}>
-          <View style={styles.cashHeader}>
-            <Text style={styles.paymentsLabel}>💰 Cash Collection Summary</Text>
+        {/* Stock Details Section */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Stock Details</Text>
+            <View style={styles.checkmarkBadge}>
+              <Text style={styles.checkmarkText}>✓</Text>
+            </View>
           </View>
 
-          {cashRecord ? (
-            <View style={styles.cashDetails}>
-              <View style={styles.cashRow}>
-                <Text style={styles.cashRowLabel}>Submitted Amount:</Text>
-                <Text style={styles.cashRowValue}>₹{cashRecord.amount}</Text>
-              </View>
-
-
-              <View style={styles.cashDateRow}>
-                <Text style={styles.cashDateText}>
-                  Recorded on: {new Date(cashRecord.date).toLocaleDateString('en-IN', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </Text>
-              </View>
+          <View style={styles.tableContainer}>
+            <View style={styles.tableHeader}>
+              <Text style={[styles.tableHeaderText, styles.productColumn]}>Product</Text>
+              <Text style={[styles.tableHeaderText, styles.stockColumn]}>Morning Stock/{'\n'}Delivered Stock</Text>
+              <Text style={[styles.tableHeaderText, styles.varianceColumn]}>Variance</Text>
             </View>
-          ) : (
-            <View style={styles.noCashContainer}>
-              <Text style={styles.noCashText}>No cash record found for today</Text>
-              <Text style={styles.noCashSubtext}>Cash amount will be recorded when submitted</Text>
-            </View>
-          )}
+
+            {deliveryData.map((item, index) => (
+              <View key={index} style={styles.tableRow}>
+                <Text style={[styles.tableCell, styles.productColumn]}>{item.productName}</Text>
+                <Text style={[styles.tableCell, styles.stockColumn]}>{item.pickedQuantity}/{item.deliveredQuantity}</Text>
+                <Text style={[styles.tableCell, styles.varianceColumn]}>{item.remainingQuantity}</Text>
+              </View>
+            ))}
+          </View>
         </View>
 
+        {/* Payment Details Section */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Payment Details</Text>
 
+          <View style={styles.tableContainer}>
+            <View style={styles.tableHeader}>
+              <Text style={[styles.tableHeaderText, styles.paymentFormColumn]}>Payment{'\n'}From{'\n'}Customer</Text>
+              <Text style={[styles.tableHeaderText, styles.paymentInHandColumn]}>Payment in{'\n'}Hand</Text>
+              <Text style={[styles.tableHeaderText, styles.paymentVarianceColumn]}>Variance</Text>
+            </View>
+
+            <View style={styles.tableRow}>
+              <Text style={[styles.tableCell, styles.paymentFormColumn]}>
+                {params.totalPayments ? params.totalPayments : '0'}
+              </Text>
+              <Text style={[styles.tableCell, styles.paymentInHandColumn]}>
+                {cashRecord ? cashRecord.amount : '0'}
+              </Text>
+              <View style={[styles.tableCell, styles.paymentVarianceColumn, styles.varianceCheckContainer]}>
+                {(() => {
+                  const expectedPayment = params.totalPayments ? Number(params.totalPayments) : 0
+                  const actualPayment = cashRecord ? cashRecord.amount : 0
+                  const variance = expectedPayment - actualPayment
+                  
+                  if (variance === 0) {
+                    return (
+                      <View style={styles.varianceCheckBadge}>
+                        <Text style={styles.varianceCheckText}>✓</Text>
+                      </View>
+                    )
+                  } else {
+                    return (
+                      <Text style={[styles.tableCell, variance > 0 ? styles.variancePositive : styles.varianceNegative]}>
+                        {variance > 0 ? '+' : ''}{variance}
+                      </Text>
+                    )
+                  }
+                })()}
+              </View>
+            </View>
+          </View>
+        </View>
 
         {/* Submit Button */}
         <TouchableOpacity
@@ -365,7 +382,7 @@ export default function DailySummaryScreen() {
               <Text style={styles.submitBtnText}>Submitting...</Text>
             </View>
           ) : (
-            <Text style={styles.submitBtnText}>✅ Final Submit for Day</Text>
+            <Text style={styles.submitBtnText}>Submit Summary</Text>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -376,7 +393,7 @@ export default function DailySummaryScreen() {
 const styles = StyleSheet.create({
   pageBackground: {
     flex: 1,
-    backgroundColor: '#F5F6F9',
+    backgroundColor: '#F5F7FA',
   },
 
   loadingContainer: {
@@ -421,215 +438,165 @@ const styles = StyleSheet.create({
 
   wrapper: {
     flexGrow: 1,
-    justifyContent: 'center',
-    padding: 18,
-    minHeight: '100%',
+    padding: 20,
+  },
+
+  headerContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
   },
 
   heading: {
-    fontSize: 26,
+    fontSize: 32,
     fontWeight: 'bold',
-    color: '#1D223B',
+    color: '#2563EB',
+    marginBottom: 16,
+  },
+
+  previewButton: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 40,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+
+  previewButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  sectionContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2563EB',
+  },
+
+  checkmarkBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#10B981',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  checkmarkText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+
+  tableContainer: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+
+  tableHeaderText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
     textAlign: 'center',
   },
 
-  sectionBox: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    marginBottom: 16,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-  },
-
-  sectionLabel: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#222831',
-    marginBottom: 8,
-  },
-
-  summaryRow: {
+  tableRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    alignItems: 'center',
   },
 
-  productName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2B2F43',
+  tableCell: {
+    fontSize: 14,
+    color: '#1F2937',
+    textAlign: 'center',
+  },
+
+  productColumn: {
+    flex: 2,
+    textAlign: 'left',
+  },
+
+  stockColumn: {
+    flex: 2,
+  },
+
+  varianceColumn: {
     flex: 1,
   },
 
-  productQty: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#297BF6',
+  paymentFormColumn: {
+    flex: 1.5,
   },
 
-  noProducts: {
-    fontSize: 15,
-    fontStyle: 'italic',
-    color: '#8B9BB7',
-    marginVertical: 6,
-    textAlign: 'center',
+  paymentInHandColumn: {
+    flex: 1.5,
   },
 
-  totalText: {
-    marginTop: 8,
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#16A34A',
-    textAlign: 'right',
+  paymentVarianceColumn: {
+    flex: 1,
   },
 
-  // ✅ UPDATED: Enhanced cash section styles
-  paymentsBox: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#16A34A',
-    borderWidth: 1,
-  },
-
-  cashHeader: {
-    marginBottom: 12,
-  },
-
-  paymentsLabel: {
-    fontWeight: 'bold',
-    fontSize: 18,
-    color: '#119E49',
-    textAlign: 'center',
-  },
-
-  cashDetails: {
-    gap: 8,
-  },
-
-  cashRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  varianceCheckContainer: {
     alignItems: 'center',
-    paddingVertical: 4,
+    justifyContent: 'center',
   },
 
-  cashRowLabel: {
-    fontSize: 16,
-    color: '#374151',
-    fontWeight: '500',
-  },
-
-  cashRowValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#16A34A',
-  },
-
-  discrepancyRow: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-    marginTop: 4,
-  },
-
-  discrepancyLabel: {
-    fontSize: 16,
-    color: '#92400E',
-    fontWeight: '600',
-  },
-
-  discrepancyValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#92400E',
-  },
-
-  discrepancyText: {
-    color: '#D97706',
-  },
-
-  cashDateRow: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#D1FAE5',
-  },
-
-  cashDateText: {
-    fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-
-  noCashContainer: {
+  varianceCheckBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#10B981',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 12,
   },
 
-  noCashText: {
-    fontSize: 16,
-    color: '#6B7280',
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-
-  noCashSubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
-  },
-
-  // ✅ UPDATED: Enhanced statistics section
-  statisticsBox: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    marginBottom: 16,
-    elevation: 2,
-    borderColor: '#2563EB',
-    borderWidth: 1,
-  },
-
-  statisticsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1E40AF',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-
-  statLabel: {
-    fontSize: 16,
-    color: '#475569',
-    fontWeight: '500',
-  },
-
-  statValue: {
+  varianceCheckText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#1E40AF',
   },
 
-  cashCollectedText: {
-    color: '#16A34A',
+  variancePositive: {
+    color: '#EF4444',
+    fontWeight: 'bold',
   },
 
-  cashPendingText: {
+  varianceNegative: {
     color: '#F59E0B',
+    fontWeight: 'bold',
   },
 
   submitBtn: {
@@ -638,11 +605,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 12,
-    elevation: 6,
     shadowColor: '#16A34A',
     shadowOpacity: 0.3,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
 
   submitBtnDisabled: {
@@ -653,7 +620,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 18,
-    letterSpacing: 0.15,
   },
 
   loadingButtonContainer: {

@@ -171,6 +171,27 @@ export default function CustomerDeliveryScreen() {
   const [associatedProductQuantities, setAssociatedProductQuantities] = useState<Record<string, string>>({})
   const [manualPaymentAmounts, setManualPaymentAmounts] = useState<Record<string, string>>({})
 
+  // Save customers data to AsyncStorage whenever it changes
+  useEffect(() => {
+    if (customers.length > 0) {
+      const saveData = async () => {
+        try {
+          const today = new Date().toISOString().split('T')[0]
+          await AsyncStorage.setItem(`delivery-data-${today}`, JSON.stringify({
+            customers,
+            selectedIdx,
+            associatedProductQuantities,
+            manualPaymentAmounts,
+            timestamp: Date.now()
+          }))
+        } catch (error) {
+          console.error('Failed to save delivery data:', error)
+        }
+      }
+      saveData()
+    }
+  }, [customers, associatedProductQuantities, manualPaymentAmounts])
+
   useEffect(() => {
     fetchDataFromAPI()
   }, [])
@@ -238,6 +259,47 @@ export default function CustomerDeliveryScreen() {
 
         setCustomers(transformedCustomers)
         setWorkerInventory(inventoryResponse.data)
+
+        // Try to restore saved data for today
+        const today = new Date().toISOString().split('T')[0]
+        const savedData = await AsyncStorage.getItem(`delivery-data-${today}`)
+        
+        if (savedData) {
+          const parsed = JSON.parse(savedData)
+          // Only restore if data was saved recently (within last 24 hours)
+          const hoursSinceLastSave = (Date.now() - parsed.timestamp) / (1000 * 60 * 60)
+          
+          if (hoursSinceLastSave < 24 && parsed.customers) {
+            // Merge saved delivery data with fresh customer list
+            const mergedCustomers = transformedCustomers.map(freshCustomer => {
+              const savedCustomer = parsed.customers.find(
+                (c: CustomerForDelivery) => c.customerId === freshCustomer.customerId
+              )
+              
+              if (savedCustomer) {
+                return {
+                  ...freshCustomer,
+                  deliveredItems: savedCustomer.deliveredItems || [],
+                  paymentReceived: savedCustomer.paymentReceived || 0,
+                  deliveryConfirmed: savedCustomer.deliveryConfirmed || false
+                }
+              }
+              return freshCustomer
+            })
+            
+            setCustomers(mergedCustomers)
+            setSelectedIdx(parsed.selectedIdx || 0)
+            setAssociatedProductQuantities(parsed.associatedProductQuantities || {})
+            setManualPaymentAmounts(parsed.manualPaymentAmounts || {})
+            
+            Toast.show({
+              type: 'info',
+              text1: 'Data Restored',
+              text2: 'Previous delivery progress restored',
+              visibilityTime: 2000,
+            })
+          }
+        }
 
         Toast.show({
           type: 'success',
@@ -745,8 +807,29 @@ export default function CustomerDeliveryScreen() {
               <View style={styles.customerHeader}>
                 <Text style={styles.customerName}>{customer.name}</Text>
                 {customer.deliveryConfirmed && (
-                  <View style={styles.confirmedBadge}>
-                    <Text style={styles.confirmedBadgeText}>✓</Text>
+                  <View style={styles.confirmedBadgeContainer}>
+                    <View style={styles.confirmedBadge}>
+                      <Text style={styles.confirmedBadgeText}>✓</Text>
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.editButton}
+                      onPress={() => {
+                        const updatedCustomers = [...customers]
+                        updatedCustomers[selectedIdx] = {
+                          ...updatedCustomers[selectedIdx],
+                          deliveryConfirmed: false
+                        }
+                        setCustomers(updatedCustomers)
+                        Toast.show({
+                          type: 'info',
+                          text1: 'Delivery Reopened',
+                          text2: 'You can now edit this delivery',
+                          visibilityTime: 2000,
+                        })
+                      }}
+                    >
+                      <Text style={styles.editButtonText}>Edit</Text>
+                    </TouchableOpacity>
                   </View>
                 )}
               </View>
@@ -1031,12 +1114,22 @@ export default function CustomerDeliveryScreen() {
               })
               
               if (newDeliveredItems.length === 0) {
-                Toast.show({
-                  type: 'info',
-                  text1: 'No Items',
-                  text2: 'Please enter quantities first',
-                  visibilityTime: 2000,
-                })
+                // Check if there are already items in the cart
+                if (customer.deliveredItems.length > 0) {
+                  Toast.show({
+                    type: 'info',
+                    text1: 'No New Items',
+                    text2: 'No quantities entered for associated products',
+                    visibilityTime: 2000,
+                  })
+                } else {
+                  Toast.show({
+                    type: 'info',
+                    text1: 'No Items',
+                    text2: 'Please enter quantities first',
+                    visibilityTime: 2000,
+                  })
+                }
                 return
               }
               
@@ -1497,6 +1590,11 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     flex: 1,
   },
+  confirmedBadgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   confirmedBadge: {
     backgroundColor: theme.colors.successLight,
     borderColor: theme.colors.success,
@@ -1509,6 +1607,17 @@ const styles = StyleSheet.create({
     color: theme.colors.successDark,
     fontSize: theme.font.size.md,
     fontWeight: theme.font.weight.bold,
+  },
+  editButton: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  editButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
   customerAddress: { 
     color: theme.colors.textSecondary, 
