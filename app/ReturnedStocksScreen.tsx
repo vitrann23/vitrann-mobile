@@ -114,16 +114,42 @@ export default function ReturnedStocksScreen() {
       if (inventoryResponse.success && inventoryResponse.data) {
         setInventoryData(inventoryResponse.data)
         
-        // Transform inventory data to products with remaining quantities defaulting to 0
+        // Parse delivery data from params to calculate delivered quantities
+        const deliveryData = params.deliveryData ? JSON.parse(params.deliveryData as string) : []
+        
+        // Create a map of product deliveries by inventoryId
+        const deliveredByInventoryId: Record<number, number> = {}
+        deliveryData.forEach((delivery: any) => {
+          if (delivery.deliveredItems && Array.isArray(delivery.deliveredItems)) {
+            delivery.deliveredItems.forEach((item: any) => {
+              // Find the inventory item that matches this product
+              const invItem = inventoryResponse.data.find((inv: InventoryItem) => 
+                inv.inventory?.product?.productId === item.productId
+              )
+              if (invItem) {
+                deliveredByInventoryId[invItem.inventoryId] = 
+                  (deliveredByInventoryId[invItem.inventoryId] || 0) + item.qty
+              }
+            })
+          }
+        })
+        
+        // Transform inventory data to products with calculated remaining quantities
         const transformedProducts: ProductItem[] = inventoryResponse.data
           .filter((item: InventoryItem) => item.totalPickedQuantity && item.totalPickedQuantity > 0)
-          .map((item: InventoryItem) => ({
-            inventoryId: item.inventoryId,
-            productName: item.inventory.product.productName,
-            pickedQuantity: item.totalPickedQuantity || 0,
-            remainingQuantity: 0, // ✅ Default to 0
-            isEdited: false
-          }))
+          .map((item: InventoryItem) => {
+            const pickedQty = item.totalPickedQuantity || 0
+            const deliveredQty = deliveredByInventoryId[item.inventoryId] || 0
+            const remainingQty = Math.max(0, pickedQty - deliveredQty) // Ensure non-negative
+            
+            return {
+              inventoryId: item.inventoryId,
+              productName: item.inventory.product.productName,
+              pickedQuantity: pickedQty,
+              remainingQuantity: remainingQty,
+              isEdited: false
+            }
+          })
 
         setProducts(transformedProducts)
 
