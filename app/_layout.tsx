@@ -16,6 +16,7 @@ export default function RootLayout() {
         <Stack.Screen name="ReturnedStocksScreen" />
         <Stack.Screen name="CashDetailsScreen" />
         <Stack.Screen name="DailySummaryScreen" />
+        <Stack.Screen name="DayCompletedScreen" />
       </Stack>
       
       {/* Toast component - this makes it available globally */}
