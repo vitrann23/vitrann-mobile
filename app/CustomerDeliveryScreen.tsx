@@ -3,7 +3,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import Constants from 'expo-constants'
 import { useLocalSearchParams, useRouter } from "expo-router"
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useMemo, useCallback } from "react"
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -16,437 +16,313 @@ import {
   TouchableOpacity,
   View,
   Dimensions,
+  Alert,
+  FlatList
 } from "react-native"
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import Toast from 'react-native-toast-message'
+import NetInfo from '@react-native-community/netinfo'
+import apiClient from '../services/apiClient'
 import { ProductDeliveryModal } from "./CDS/ProductDeliveryModal"
 
-type DeliveredItem = {
-  name: string;
-  qty: number;
-  productId: number;
-  price: number;
-  originalPrice: number;
-  isEdited: boolean;
-}
+// New Hooks & Types
+import { useCustomerDelivery } from '../hooks/useCustomerDelivery'
+import { useOfflineQueue } from '../hooks/useOfflineQueue'
+import { CustomerForDelivery, DeliveredItem, CustomerProductRelation, WorkerInventory } from '../types'
+import { calculateTotalPayment, calculateTotalQuantity, hasEditedPrices } from '../utils/deliveryCalculations'
 
-type Customer = {
-  id: number
-  workerId: number
-  customerId: number
-  fromDate: string
-  sequenceNumber: number
-  thruDate: string | null
-  customer: {
-    customerId: number
-    firstName: string
-    lastName: string | null
-    address1: string
-    address2: string | null
-    phoneNumber: string | null
-    city: string | null
-    pincode: string | null
-    classification: string
-  }
-}
-
-type WorkerInventory = {
-  id: number
-  workerId: number
-  inventoryId: number
-  totalPickedQuantity: number | null
-  remainingQuantity: number | null
-  date: string
-  inventory: {
-    inventoryId: number
-    totalOrderedQuantity: number
-    receivedQuantity: number | null
-    remainingQuantity: number | null
-    date: string
-    product: {
-      productId: number
-      productName: string
-      currentProductPrice: number
-      storeId: string
-      imageUrl: string | null
-      description: string | null
-    }
-  }
-}
-
-type CustomerForDelivery = {
-  id: string
-  name: string
-  type: string
-  address: string
-  deliveredItems: DeliveredItem[]
-  paymentReceived: number
-  customerId: number
-  deliveryConfirmed: boolean
-  sequenceNumber: number
-  associatedProductIds?: number[]
-}
-
-type CustomerProductRelation = {
-  id: number
-  customerId: number
-  productId: number | null
-  quantityAssociated: number
-  fromDate: string
-  thruDate: string | null
-  product: {
-    productId: number
-    productName: string
-    currentProductPrice: number
-    storeId: string
-    imageUrl: string | null
-  } | null
-}
-
-const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
-
-const makeAuthenticatedRequest = async (url: string, options: RequestInit = {}) => {
-  try {
-    const token = await AsyncStorage.getItem('authToken')
-    if (!token) {
-      throw new Error('No authentication token found')
-    }
-
-    if (!API_BASE_URL) {
-      throw new Error('API base URL is not configured.')
-    }
-
-    const response = await fetch(`${API_BASE_URL}${url}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return data
-  } catch (error) {
-    console.error('API request failed:', error)
-    throw error
-  }
-}
-
-const processDeliveryRequest = async (deliveryData: any) => {
-  console.log(API_BASE_URL)
-  try {
-    const response = await makeAuthenticatedRequest('/deliveries/process', {
-      method: 'POST',
-      body: JSON.stringify(deliveryData),
-    })
-    return response
-  } catch (error) {
-    console.error('Delivery processing failed:', error)
-    throw error
-  }
-}
+const { width } = Dimensions.get('window')
 
 export default function CustomerDeliveryScreen() {
-  const params = useLocalSearchParams() as Record<string, string>
   const router = useRouter()
+  const { workerId: workerIdParam } = useLocalSearchParams()
   const insets = useSafeAreaInsets()
 
-  const tabScrollViewRef = useRef<ScrollView>(null);
-  const tabLayouts = useRef<Record<number, { x: number, width: number }>>({});
+  // Use new hooks
+  const {
+    customers,
+    inventory,
+    relations: customerProductRelations = [],
+    loading: isLoading,
+    error: apiError,
+    refetchData,
+    setCustomers
+  } = useCustomerDelivery()
+
+  const {
+    queueSize: offlineQueueCount,
+    isSyncing,
+    addToQueue: addToOfflineQueue,
+    syncQueue: syncOfflineQueue
+  } = useOfflineQueue()
+
+  // Local state for UI
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedIdx, setSelectedIdx] = useState<number>(0)
+  const [modalVisible, setModalVisible] = useState(false)
+  const [processingDelivery, setProcessingDelivery] = useState(false)
+
+  // Additional UI state
+  const [associatedProductQuantities, setAssociatedProductQuantities] = useState<Record<string, string>>({})
+  const [productDeliveryModal, setProductDeliveryModal] = useState(false) // For modal visibility
+
+  // Refs for tabs
+  const tabListRef = useRef<FlatList>(null);
   const { width: screenWidth } = Dimensions.get('window');
 
-  const [customers, setCustomers] = useState<CustomerForDelivery[]>([])
-  const [workerInventory, setWorkerInventory] = useState<WorkerInventory[]>([])
-  const [customerProductRelations, setCustomerProductRelations] = useState<CustomerProductRelation[]>([])
-  const [selectedIdx, setSelectedIdx] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [productDeliveryModal, setProductDeliveryModal] = useState(false)
-  const [processingDelivery, setProcessingDelivery] = useState(false)
-  const [associatedProductQuantities, setAssociatedProductQuantities] = useState<Record<string, string>>({})
+  // Derived state
+  const filteredCustomers = useMemo(() => {
+    if (!searchQuery) return customers;
+    return customers.filter(c =>
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.id.includes(searchQuery)
+    );
+  }, [customers, searchQuery]);
 
+  const customer = filteredCustomers[selectedIdx]
+  const isB2B = customer?.type === 'B2B'
+
+  // Scroll to tab when selected
   useEffect(() => {
-    fetchDataFromAPI()
-  }, [])
-
-  useEffect(() => {
-    if (customers.length === 0 || !tabScrollViewRef.current) {
-      return;
-    }
-
-    const layout = tabLayouts.current[selectedIdx];
-    if (!layout) {
-      return;
-    }
-
-    const scrollToX = layout.x + (layout.width / 2) - (screenWidth / 2);
-    const clampedScrollToX = Math.max(0, scrollToX);
-
-    tabScrollViewRef.current.scrollTo({ x: clampedScrollToX, animated: true });
-
-  }, [selectedIdx, customers, screenWidth]);
-
-  const fetchDataFromAPI = async () => {
+    if (customers.length === 0 || !tabListRef.current) return;
     try {
-      setLoading(true)
-      setError(null)
+      tabListRef.current.scrollToIndex({
+        index: selectedIdx,
+        animated: true,
+        viewPosition: 0.5
+      });
+    } catch (e) {
+      // Ignore specific scroll errors
+    }
+  }, [selectedIdx, customers]);
 
-      if (!API_BASE_URL) {
-        setError('API configuration missing.')
-        return
-      }
+  // Initial tab selection
+  useEffect(() => {
+    if (customers.length > 0 && selectedIdx >= customers.length) {
+      setSelectedIdx(0);
+    }
+  }, [customers]);
 
-      const customersResponse = await makeAuthenticatedRequest('/daily-activity-ci/my-customers')
-      const inventoryResponse = await makeAuthenticatedRequest('/daily-activity-ci/my-inventory')
-      const relationsResponse = await makeAuthenticatedRequest('/relations/customer-products')
+  const handleTabPress = (index: number) => {
+    setSelectedIdx(index);
+  };
 
-      if (customersResponse.success && inventoryResponse.success && relationsResponse.success) {
-        const sortedCustomers = customersResponse.data.sort((a: Customer, b: Customer) => 
-          a.sequenceNumber - b.sequenceNumber
-        )
+  const getAssociatedProducts = useCallback(() => {
+    if (!customer || !inventory) return [];
 
-        const relations = relationsResponse.data as CustomerProductRelation[]
-        setCustomerProductRelations(relations)
+    // Get inventory items that match the customer's associated products
+    const directAssociations = inventory.filter(inv =>
+      customer.associatedProductIds?.includes(inv.inventory.product.productId)
+    );
 
-        const activeRelations = relations.filter(rel => rel.thruDate === null && rel.productId !== null)
+    return directAssociations;
+  }, [customer, inventory]);
 
-        const transformedCustomers: CustomerForDelivery[] = sortedCustomers.map((item: Customer) => {
-          const associatedProducts = activeRelations
-            .filter(rel => rel.customerId === item.customer.customerId)
-            .map(rel => rel.productId!)
-            .filter(id => id !== null)
+  const handleDeliveryConfirm = async () => {
+    if (!customer) return;
 
-          return {
-            id: item.customer.customerId.toString(),
-            name: `${item.customer.firstName} ${item.customer.lastName || ''}`.trim(),
-            type: item.customer.classification === 'B2B' ? 'B2B' : 'B2C',
-            address: `${item.customer.address1}${item.customer.address2 ? ', ' + item.customer.address2 : ''}, ${item.customer.city || ''} ${item.customer.pincode || ''}`.trim(),
-            deliveredItems: [],
-            paymentReceived: 0,
-            customerId: item.customer.customerId,
-            deliveryConfirmed: false,
-            sequenceNumber: item.sequenceNumber,
-            associatedProductIds: associatedProducts
-          }
-        })
+    if (customer.deliveredItems.length === 0) {
+      Alert.alert('No Items', 'Please add at least one item to confirm delivery.');
+      return;
+    }
 
-        setCustomers(transformedCustomers)
-        setWorkerInventory(inventoryResponse.data)
+    setProcessingDelivery(true);
 
-        Toast.show({
-          type: 'success',
-          text1: 'Ready for Delivery',
-          text2: `${transformedCustomers.length} customers loaded`,
-          visibilityTime: 2000,
-        })
-      } else {
-        throw new Error('Failed to fetch data from API')
-      }
+    try {
+      const payload = {
+        workerId: parseInt(workerIdParam as string),
+        customerId: customer.customerId,
+        deliveredItems: customer.deliveredItems.map(item => ({
+          productId: item.productId,
+          quantity: item.qty,
+          price: item.price,
+          originalPrice: item.originalPrice, // Send original for verification
+          isEdited: item.isEdited
+        })),
+        paymentReceived: calculateTotalPayment(customer.deliveredItems),
+        latitude: null, // Could add location later
+        longitude: null,
+        timestamp: new Date().toISOString()
+      };
+
+      // Add to offline queue/sync
+      await addToOfflineQueue('delivery', payload, `del_${customer.customerId}_${Date.now()}`);
+
+      // Optimistic update
+      const updatedCustomers = [...customers];
+      updatedCustomers[selectedIdx] = {
+        ...updatedCustomers[selectedIdx],
+        deliveryConfirmed: true,
+        paymentReceived: payload.paymentReceived
+      };
+      setCustomers(updatedCustomers);
+
+      // Persist optimistic update to cache
+      AsyncStorage.setItem('offline_customers', JSON.stringify(updatedCustomers));
+
+      Toast.show({
+        type: 'success',
+        text1: 'Delivery Confirmed',
+        text2: 'Delivery saved successfully',
+      });
+
     } catch (error) {
-      console.error('Error fetching data:', error)
-      setError('Failed to load data from server.')
-
+      console.error('Error confirming delivery:', error);
       Toast.show({
         type: 'error',
-        text1: 'Data Load Failed',
-        text2: 'Unable to load customers and inventory',
-        visibilityTime: 3000,
-      })
-
-      setCustomers([])
-      setWorkerInventory([])
+        text1: 'Error',
+        text2: 'Failed to save delivery',
+      });
     } finally {
-      setLoading(false)
+      setProcessingDelivery(false);
     }
-  }
+  };
 
-  const customer = customers[selectedIdx]
+  const handleAddProduct = (product: any, qty: number, price: number) => {
+    if (!customer) return;
 
-  const handleTabPress = (idx: number) => {
-    setSelectedIdx(idx)
-  }
-
-  const getAssociatedProducts = (): WorkerInventory[] => {
-    if (!customer?.associatedProductIds || customer.associatedProductIds.length === 0) {
-      return []
+    // Check duplication
+    if (customer.deliveredItems.some(item => item.productId === product.productId)) {
+      Toast.show({ type: 'info', text1: 'Item already added' });
+      return;
     }
 
-    return workerInventory.filter(item => {
-      const productId = item.inventory?.product.productId
-      return productId && 
-             customer.associatedProductIds!.includes(productId) &&
-             (item.totalPickedQuantity || 0) > 0
-    })
-  }
-
-  const getUnassociatedProducts = (): WorkerInventory[] => {
-    if (!customer?.associatedProductIds || customer.associatedProductIds.length === 0) {
-      return workerInventory.filter(item => (item.totalPickedQuantity || 0) > 0)
-    }
-
-    return workerInventory.filter(item => {
-      const productId = item.inventory?.product.productId
-      return productId && 
-             !customer.associatedProductIds!.includes(productId) &&
-             (item.totalPickedQuantity || 0) > 0
-    })
-  }
-
-  const hasUnassociatedProducts = (): boolean => {
-    const unassociated = getUnassociatedProducts()
-    return unassociated.length > 0
-  }
-
-  const handleAddAssociatedProduct = (inventoryItem: WorkerInventory, quantity?: number) => {
-    if (!inventoryItem.inventory?.product) return
-
-    const product = inventoryItem.inventory.product
-    const availableQty = inventoryItem.totalPickedQuantity || 0
-    
-    const totalDelivered = customers.reduce(
-      (sum, cust) =>
-        sum +
-        cust.deliveredItems
-          .filter(item => item.productId === product.productId)
-          .reduce((subSum, item) => subSum + item.qty, 0),
-      0
-    )
-
-    const availableForThisProduct = availableQty - totalDelivered
-
-    if (availableForThisProduct <= 0) {
-      Toast.show({
-        type: 'error',
-        text1: 'No Stock Available',
-        text2: `${product.productName} is out of stock`,
-        visibilityTime: 2000,
-      })
-      return
-    }
-
-    const quantityToUse = quantity || Math.min(
-      customerProductRelations.find(
-        rel => rel.customerId === customer.customerId && 
-               rel.productId === product.productId &&
-               rel.thruDate === null
-      )?.quantityAssociated || 1,
-      availableForThisProduct
-    )
-
-    if (quantityToUse <= 0 || quantityToUse > availableForThisProduct) {
-      Toast.show({
-        type: 'error',
-        text1: 'Invalid Quantity',
-        text2: `Please enter a quantity between 1 and ${availableForThisProduct}`,
-        visibilityTime: 2000,
-      })
-      return
-    }
-
-    const newDeliveredItem: DeliveredItem = {
-      name: product.productName,
-      qty: quantityToUse,
+    const newItem: DeliveredItem = {
       productId: product.productId,
-      price: Number(product.currentProductPrice) * quantityToUse,
-      originalPrice: Number(product.currentProductPrice),
-      isEdited: false
-    }
+      name: product.productName,
+      qty,
+      price: price,
+      originalPrice: product.currentProductPrice,
+      isEdited: price !== product.currentProductPrice
+    };
 
-    const alreadyAdded = customer.deliveredItems.some(
-      item => item.productId === product.productId
-    )
-
-    if (alreadyAdded) {
-      Toast.show({
-        type: 'info',
-        text1: 'Already Added',
-        text2: `${product.productName} is already in the delivery list`,
-        visibilityTime: 2000,
-      })
-      return
-    }
-
-    const updatedDeliveredItems = [...customer.deliveredItems, newDeliveredItem]
-    const updatedCustomers = [...customers]
+    const updatedCustomers = [...customers];
     updatedCustomers[selectedIdx] = {
       ...updatedCustomers[selectedIdx],
-      deliveredItems: updatedDeliveredItems
+      deliveredItems: [...updatedCustomers[selectedIdx].deliveredItems, newItem]
+    };
+    setCustomers(updatedCustomers);
+  };
+
+  const handleRemoveProduct = (productId: number) => {
+    if (!customer) return;
+
+    const updatedCustomers = [...customers];
+    updatedCustomers[selectedIdx] = {
+      ...updatedCustomers[selectedIdx],
+      deliveredItems: updatedCustomers[selectedIdx].deliveredItems.filter(item => item.productId !== productId)
+    };
+    setCustomers(updatedCustomers);
+  };
+
+  const getDeliveryProgress = () => {
+    const completed = customers.filter(c => c.deliveryConfirmed).length;
+    const total = customers.length;
+    return { completed, total };
+  };
+
+
+  const getUnassociatedProducts = useCallback(() => {
+    if (!customer || !inventory) return [];
+
+    // If no associations, return all available inventory
+    if (!customer.associatedProductIds || customer.associatedProductIds.length === 0) {
+      return inventory.filter(item => (item.totalPickedQuantity || 0) > 0);
     }
 
-    setCustomers(updatedCustomers)
+    // Otherwise filter out associated products
+    return inventory.filter(item => {
+      const productId = item.inventory?.product.productId;
+      return productId &&
+        !customer.associatedProductIds?.includes(productId) &&
+        (item.totalPickedQuantity || 0) > 0;
+    });
+  }, [customer, inventory]);
 
-    const quantityKey = `${customer.customerId}-${product.productId}`
-    setAssociatedProductQuantities(prev => {
-      const newState = { ...prev }
-      delete newState[quantityKey]
-      return newState
-    })
+  const hasUnassociatedProducts = () => getUnassociatedProducts().length > 0;
 
-    Toast.show({
-      type: 'success',
-      text1: 'Product Added',
-      text2: `${product.productName} (${quantityToUse} packets) added`,
-      visibilityTime: 1500,
-    })
-  }
+  const handleAddAssociatedProduct = (inventoryItem: WorkerInventory, quantity?: number) => {
+    if (!inventoryItem.inventory?.product || !customer) return;
+    const product = inventoryItem.inventory.product;
+
+    // Check duplication
+    if (customer.deliveredItems.some(item => item.productId === product.productId)) {
+      Toast.show({ type: 'info', text1: 'Item already added' });
+      return;
+    }
+
+    const availableQty = inventoryItem.totalPickedQuantity || 0;
+
+    // Calculate availability (subtracting what others took)
+    const totalDeliveredByAll = customers.reduce((sum, cust) => {
+      if (cust.id === customer.id) return sum; // exclude current
+      return sum + cust.deliveredItems
+        .filter(item => item.productId === product.productId)
+        .reduce((s, i) => s + i.qty, 0);
+    }, 0);
+
+    const availableForThisProduct = availableQty - totalDeliveredByAll;
+
+    if (availableForThisProduct <= 0) {
+      Toast.show({ type: 'error', text1: 'Out of Stock', text2: `${product.productName} is out of stock` });
+      return;
+    }
+
+    const qtyToAdd = quantity || 1;
+    if (qtyToAdd > availableForThisProduct) {
+      Toast.show({ type: 'error', text1: 'Not Enough Stock', text2: `Only ${availableForThisProduct} available` });
+      return;
+    }
+
+    handleAddProduct(product, qtyToAdd, Number(product.currentProductPrice) * qtyToAdd);
+  };
 
   const handleItemTotalChange = (itemIndex: number, newTotal: string) => {
-    const totalAmount = Number(newTotal) || 0
-    
-    const updatedCustomers = [...customers]
-    const updatedItems = [...customer.deliveredItems]
+    const totalAmount = Number(newTotal) || 0;
+    if (!customer) return;
+
+    const updatedCustomers = [...customers];
+    const updatedItems = [...customer.deliveredItems];
     updatedItems[itemIndex] = {
       ...updatedItems[itemIndex],
       price: totalAmount,
       isEdited: true
-    }
-    
+    };
+
     updatedCustomers[selectedIdx] = {
       ...updatedCustomers[selectedIdx],
       deliveredItems: updatedItems
-    }
-    
-    setCustomers(updatedCustomers)
-  }
+    };
+    setCustomers(updatedCustomers);
+  };
 
   const handleItemQuantityChange = (itemIndex: number, newQty: string) => {
     const newQuantity = parseInt(newQty) || 0;
+    if (!customer) return;
 
     const updatedCustomers = [...customers];
-    const currentCustomer = updatedCustomers[selectedIdx];
-    const updatedItems = [...currentCustomer.deliveredItems];
+    const updatedItems = [...customer.deliveredItems];
     const itemToUpdate = updatedItems[itemIndex];
 
     if (!itemToUpdate) return;
 
-    const inventoryItem = workerInventory.find(
-      (inv) => inv.inventory?.product.productId === itemToUpdate.productId
-    );
+    const inventoryItem = inventory?.find(inv => inv.inventory?.product.productId === itemToUpdate.productId);
     const totalPicked = inventoryItem?.totalPickedQuantity || 0;
 
-    const totalDeliveredByAll = customers.reduce(
-      (sum, cust) =>
-        sum +
-        cust.deliveredItems
-          .filter((i) => i.productId === itemToUpdate.productId)
-          .reduce((s, i) => s + i.qty, 0),
-      0
-    );
-    
-    const deliveredElsewhere = totalDeliveredByAll - itemToUpdate.qty;
-    const maxAvailable = totalPicked - deliveredElsewhere;
+    const totalDeliveredByAll = customers.reduce((sum, cust) => {
+      if (cust.id === customer.id) {
+        return sum + cust.deliveredItems.filter(i => i.productId === itemToUpdate.productId && i !== itemToUpdate).reduce((s, i) => s + i.qty, 0);
+      }
+      return sum + cust.deliveredItems.filter(i => i.productId === itemToUpdate.productId).reduce((s, i) => s + i.qty, 0);
+    }, 0);
+
+    const maxAvailable = totalPicked - totalDeliveredByAll;
 
     if (newQuantity > maxAvailable) {
       Toast.show({
         type: 'error',
         text1: 'Not Enough Stock',
-        text2: `You only have ${maxAvailable} available.`,
-        visibilityTime: 3000,
+        text2: `Only ${maxAvailable} available`,
       });
       return;
     }
@@ -454,164 +330,66 @@ export default function CustomerDeliveryScreen() {
     updatedItems[itemIndex] = {
       ...itemToUpdate,
       qty: newQuantity,
-      price: itemToUpdate.isEdited
-        ? itemToUpdate.price
-        : itemToUpdate.originalPrice * newQuantity,
+      price: itemToUpdate.isEdited ? itemToUpdate.price : itemToUpdate.originalPrice * newQuantity
     };
 
-    updatedCustomers[selectedIdx] = {
-      ...currentCustomer,
-      deliveredItems: updatedItems,
-    };
-
+    updatedCustomers[selectedIdx] = { ...updatedCustomers[selectedIdx], deliveredItems: updatedItems };
     setCustomers(updatedCustomers);
   };
 
   const handleRemoveItem = (itemIndex: number) => {
+    if (!customer) return;
     const updatedCustomers = [...customers];
-    const currentCustomer = updatedCustomers[selectedIdx];
-    
-    const itemRemoved = currentCustomer.deliveredItems[itemIndex];
-
-    const updatedItems = currentCustomer.deliveredItems.filter(
-      (_, idx) => idx !== itemIndex
-    );
+    const updatedItems = customer.deliveredItems.filter((_, idx) => idx !== itemIndex);
 
     updatedCustomers[selectedIdx] = {
-      ...currentCustomer,
-      deliveredItems: updatedItems,
+      ...updatedCustomers[selectedIdx],
+      deliveredItems: updatedItems
     };
-
     setCustomers(updatedCustomers);
-    
-    Toast.show({
-      type: 'info',
-      text1: 'Item Removed',
-      text2: `${itemRemoved.name} removed from list.`,
-      visibilityTime: 2000,
-    });
+    Toast.show({ type: 'info', text1: 'Item Removed' });
   };
 
-  const calculateTotalPayment = (deliveredItems: DeliveredItem[]) => {
-    return deliveredItems.reduce((total, item) => total + item.price, 0)
-  }
-
-  const calculateBillAmount = (item: DeliveredItem) => {
-    if (item.isEdited) {
-      return item.price
-    } else {
-      return item.originalPrice * item.qty
-    }
-  }
-
   const confirmDelivery = async () => {
-    const hasDeliveredItems = customer.deliveredItems.length > 0
-    
+    if (!customer) return;
+    const hasDeliveredItems = customer.deliveredItems.length > 0;
+
     if (selectedIdx === customers.length - 1) {
-      if (hasDeliveredItems) {
-        await processCurrentDelivery()
+      if (hasDeliveredItems && !customer.deliveryConfirmed) {
+        await handleDeliveryConfirm();
       }
-      
-      const deliveryData = customers.map(customer => ({
-        customerId: customer.customerId,
-        deliveredItems: customer.deliveredItems,
-        paymentReceived: customer.paymentReceived,
-        deliveryConfirmed: customer.deliveryConfirmed
-      }))
+
+      const deliveryData = customers.map(c => ({
+        customerId: c.customerId,
+        deliveredItems: c.deliveredItems,
+        paymentReceived: c.paymentReceived,
+        deliveryConfirmed: c.deliveryConfirmed
+      }));
+      const totalPayments = customers.reduce((sum, c) => sum + c.paymentReceived, 0);
 
       router.push({
         pathname: "/CashDetailsScreen",
         params: {
           deliveryData: JSON.stringify(deliveryData),
-          totalPayments: customers.reduce((sum, cust) => sum + cust.paymentReceived, 0).toString(),
-        },
-      })
-      return
-    }
-
-    if (hasDeliveredItems) {
-      await processCurrentDelivery()
-    } else {
-      Toast.show({
-        type: 'info',
-        text1: 'No Items',
-        text2: 'Moving to next customer',
-        visibilityTime: 1500,
-      })
-    }
-
-    setSelectedIdx(selectedIdx + 1)
-  }
-
-  const processCurrentDelivery = async () => {
-    if (customer.deliveryConfirmed) return
-
-    setProcessingDelivery(true)
-
-    try {
-      Toast.show({
-        type: 'info',
-        text1: 'Processing...',
-        text2: `Confirming delivery for ${customer.name}`,
-        visibilityTime: 2000,
-      })
-
-      for (const item of customer.deliveredItems) {
-        const inventoryItem = workerInventory.find(inv => 
-          inv.inventory?.product.productId === item.productId
-        )
-        
-        if (inventoryItem) {
-          const deliveryDto = {
-            customerId: customer.customerId,
-            inventoryId: inventoryItem.inventoryId,
-            deliveredQuantity: item.qty,
-            billAmount: calculateBillAmount(item),
-            isPriceCustomized: item.isEdited
-          }
-
-          const response = await processDeliveryRequest(deliveryDto)
-          
-          if (!response.success && !response.isDuplicate) {
-            throw new Error(`Failed to process ${item.name}: ${response.message}`)
-          }
+          totalPayments: totalPayments.toString()
         }
-      }
-
-      const updatedCustomers = [...customers]
-      updatedCustomers[selectedIdx] = { 
-        ...updatedCustomers[selectedIdx], 
-        deliveryConfirmed: true,
-        paymentReceived: calculateTotalPayment(customer.deliveredItems)
-      }
-      setCustomers(updatedCustomers)
-
-      Toast.show({
-        type: 'success',
-        text1: 'Delivery Confirmed',
-        text2: `${customer.name}'s delivery processed`,
-        visibilityTime: 2000,
-      })
-
-    } catch (error) {
-      console.error('Delivery processing error:', error)
-      
-      Toast.show({
-        type: 'error',
-        text1: 'Processing Failed',
-        text2: 'Server error occurred',
-        visibilityTime: 3000,
-      })
-    } finally {
-      setProcessingDelivery(false)
+      });
+      return;
     }
-  }
 
-  const getDeliveryProgress = () => {
-    const completed = selectedIdx
-    const total = customers.length
-    return { completed, total }
-  }
+    if (hasDeliveredItems && !customer.deliveryConfirmed) {
+      await handleDeliveryConfirm();
+    } else if (!hasDeliveredItems) {
+      Toast.show({ type: 'info', text1: 'Skipping' });
+    }
+
+    setSelectedIdx(selectedIdx + 1);
+  };
+
+  // Compatibility aliases for render
+  const loading = isLoading;
+  const error = apiError ? (apiError as any).message || 'An error occurred' : null;
+  const fetchDataFromAPI = refetchData;
 
   if (loading) {
     return (
@@ -629,18 +407,12 @@ export default function CustomerDeliveryScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>
-            {!API_BASE_URL ? 'API Configuration Missing' : error || 'No customers assigned'}
+            {error || 'No customers assigned'}
           </Text>
-          
-          {!API_BASE_URL ? (
-            <Text style={styles.configInstructions}>
-              Create a .env file with EXPO_PUBLIC_API_BASE_URL
-            </Text>
-          ) : (
-            <TouchableOpacity style={styles.retryButton} onPress={fetchDataFromAPI}>
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
-          )}
+
+          <TouchableOpacity style={styles.retryButton} onPress={fetchDataFromAPI}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     )
@@ -652,55 +424,75 @@ export default function CustomerDeliveryScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
-      
+
+      {offlineQueueCount > 0 && (
+        <View style={styles.syncBanner}>
+          <Text style={styles.syncBannerText}>
+            ⚠️ {offlineQueueCount} items waiting to sync offline
+          </Text>
+          <TouchableOpacity
+            style={styles.syncButton}
+            onPress={syncOfflineQueue}
+            disabled={isSyncing}
+          >
+            <Text style={styles.syncButtonText}>
+              {isSyncing ? 'Syncing...' : 'Sync Now'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.progressHeader}>
         <Text style={styles.progressText}>
           Delivery {progress.completed + 1} of {progress.total}
         </Text>
         <View style={styles.progressBar}>
-          <View 
-            style={[styles.progressFill, { width: `${((progress.completed) / progress.total) * 100}%` }]} 
+          <View
+            style={[styles.progressFill, { width: `${((progress.completed) / progress.total) * 100}%` }]}
           />
         </View>
       </View>
-      
+
       <View style={styles.tabsContainer}>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
+        <FlatList
+          ref={tabListRef}
+          data={customers}
+          horizontal
+          showsHorizontalScrollIndicator={false}
           style={styles.tabs}
-          ref={tabScrollViewRef}
-        >
-          {customers.map((c, idx) => (
+          keyExtractor={(item) => item.id}
+          initialScrollIndex={0}
+          onScrollToIndexFailed={info => {
+            const wait = new Promise(resolve => setTimeout(resolve, 500));
+            wait.then(() => {
+              tabListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 });
+            });
+          }}
+          renderItem={({ item, index }) => (
             <TouchableOpacity
-              key={c.id}
               style={[
-                styles.tab, 
-                selectedIdx === idx && styles.activeTab,
-                c.deliveryConfirmed && styles.confirmedTab
+                styles.tab,
+                selectedIdx === index && styles.activeTab,
+                item.deliveryConfirmed && styles.confirmedTab
               ]}
-              onPress={() => handleTabPress(idx)}
-              onLayout={(event) => {
-                const { x, width } = event.nativeEvent.layout;
-                tabLayouts.current[idx] = { x, width };
-              }}
+              onPress={() => handleTabPress(index)}
             >
               <Text style={[
-                styles.tabText, 
-                selectedIdx === idx && styles.activeTabText,
-                c.deliveryConfirmed && styles.confirmedTabText
+                styles.tabText,
+                selectedIdx === index && styles.activeTabText,
+                item.deliveryConfirmed && styles.confirmedTabText
               ]}>
-                {c.deliveryConfirmed ? '✓ ' : ''}{c.name}
+                {item.deliveryConfirmed ? '✓ ' : ''}{item.name}
               </Text>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
+          )}
+        />
       </View>
 
       <KeyboardAvoidingView style={styles.keyboardAvoidingView} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollViewContent}>
           <View style={styles.card}>
-            
+
             <View style={styles.customerCard}>
               <View style={styles.customerHeader}>
                 <Text style={styles.customerName}>{customer.name}</Text>
@@ -736,9 +528,9 @@ export default function CustomerDeliveryScreen() {
                     const availableQty = (inventoryItem.totalPickedQuantity || 0) - totalDelivered
 
                     const associatedQty = customerProductRelations.find(
-                      rel => rel.customerId === customer.customerId && 
-                             rel.productId === product.productId &&
-                             rel.thruDate === null
+                      rel => rel.customerId === customer.customerId &&
+                        rel.productId === product.productId &&
+                        rel.thruDate === null
                     )?.quantityAssociated || 0
 
                     const quantityKey = `${customer.customerId}-${product.productId}`
@@ -763,12 +555,12 @@ export default function CustomerDeliveryScreen() {
                             ₹{Number(product.currentProductPrice)}/packet
                           </Text>
                         </View>
-                        
+
                         {!isAlreadyAdded && availableQty > 0 && !customer.deliveryConfirmed && (
                           <View style={styles.listCardActions}>
                             <View style={styles.priceInputContainer}>
                               <TextInput
-                                style={[styles.priceInput, {textAlign: 'center', width: 50}]}
+                                style={[styles.priceInput, { textAlign: 'center', width: 50 }]}
                                 value={currentQuantity}
                                 placeholder={associatedQty > 0 ? associatedQty.toString() : '0'}
                                 onChangeText={(text) => {
@@ -789,9 +581,9 @@ export default function CustomerDeliveryScreen() {
                                   const numValue = parseInt(numText);
 
                                   if (!isNaN(numValue) && numValue <= availableQty) {
-                                    setAssociatedProductQuantities(prev => ({ 
+                                    setAssociatedProductQuantities(prev => ({
                                       ...prev,
-                                      [quantityKey]: numValue.toString() 
+                                      [quantityKey]: numValue.toString()
                                     }));
                                   }
                                 }}
@@ -802,8 +594,8 @@ export default function CustomerDeliveryScreen() {
                             <TouchableOpacity
                               style={[
                                 styles.addButton,
-                                ( (parseInt(currentQuantity) || 0) <= 0 || (parseInt(currentQuantity) || 0) > availableQty ) 
-                                  && styles.addButtonDisabled
+                                ((parseInt(currentQuantity) || 0) <= 0 || (parseInt(currentQuantity) || 0) > availableQty)
+                                && styles.addButtonDisabled
                               ]}
                               onPress={() => {
                                 const qty = parseInt(currentQuantity) || 0
@@ -811,13 +603,13 @@ export default function CustomerDeliveryScreen() {
                                   handleAddAssociatedProduct(inventoryItem, qty)
                                 }
                               }}
-                              disabled={ (parseInt(currentQuantity) || 0) <= 0 || (parseInt(currentQuantity) || 0) > availableQty }
+                              disabled={(parseInt(currentQuantity) || 0) <= 0 || (parseInt(currentQuantity) || 0) > availableQty}
                             >
                               <Text style={styles.addButtonText}>Add</Text>
                             </TouchableOpacity>
                           </View>
                         )}
-                        
+
                         {isAlreadyAdded && (
                           <View style={styles.listCardActions}>
                             <View style={styles.addedBadge}>
@@ -838,17 +630,17 @@ export default function CustomerDeliveryScreen() {
                 <View style={styles.listContainer}>
                   {customer.deliveredItems.map((item, idx) => (
                     <View key={idx} style={[styles.listCard, styles.itemCard]}>
-                      
+
                       <View style={styles.listCardInfo}>
                         <Text style={styles.listCardName}>{item.name}</Text>
                       </View>
-                      
+
                       <View style={styles.listCardActions}>
                         <View style={styles.priceInputContainer}>
                           <TextInput
                             style={[
                               styles.priceInput,
-                              {textAlign: 'center', width: 50},
+                              { textAlign: 'center', width: 50 },
                               customer.deliveryConfirmed && styles.textInputDisabled
                             ]}
                             value={item.qty.toString()}
@@ -858,7 +650,7 @@ export default function CustomerDeliveryScreen() {
                             maxLength={3}
                           />
                         </View>
-                          
+
                         <View style={styles.priceInputContainer}>
                           <Text style={styles.rupeeSymbol}>₹</Text>
                           <TextInput
@@ -904,8 +696,8 @@ export default function CustomerDeliveryScreen() {
                   styles.addProductsButtonText,
                   customer.deliveredItems.length > 0 && styles.addProductsButtonSecondaryText
                 ]}>
-                  {customer.associatedProductIds && customer.associatedProductIds.length > 0 
-                    ? '📦 Add Other Products' 
+                  {customer.associatedProductIds && customer.associatedProductIds.length > 0
+                    ? '📦 Add Other Products'
                     : '📦 Add Products'}
                 </Text>
               </TouchableOpacity>
@@ -918,26 +710,26 @@ export default function CustomerDeliveryScreen() {
         visible={productDeliveryModal}
         customer={customer}
         customers={customers}
-        setCustomers={setCustomers}
+        setCustomers={setCustomers as any}
         selectedIdx={selectedIdx}
         workerInventory={getUnassociatedProducts()}
         onClose={() => setProductDeliveryModal(false)}
       />
 
       <View style={[styles.fixedButtonContainer, { bottom: insets.bottom + 20 }]}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[
             styles.confirmButton,
             processingDelivery && styles.confirmButtonProcessing
-          ]} 
+          ]}
           onPress={confirmDelivery}
           disabled={processingDelivery}
         >
           <Text style={styles.confirmButtonText}>
-            {processingDelivery 
-              ? 'Processing...' 
-              : selectedIdx === customers.length - 1 
-                ? 'Complete All Deliveries' 
+            {processingDelivery
+              ? 'Processing...'
+              : selectedIdx === customers.length - 1
+                ? 'Complete All Deliveries'
                 : 'Confirm & Next Customer'
             }
           </Text>
@@ -954,28 +746,28 @@ const theme = {
     primaryLighter: '#F0F9FF',
     primaryDark: '#1E40AF',
     primaryBorder: '#DBEAFE',
-    
+
     success: '#10B981',
     successLight: '#ECFDF5',
     successDark: '#059669',
-    
+
     warning: '#F59E0B',
-    
+
     error: '#EF4444',
     errorLight: '#FEF2F2',
     errorBorder: '#FCA5A5',
     errorDark: '#DC2626',
-    
+
     background: '#F8F9FA',
     surface: '#FFFFFF',
-    
+
     textPrimary: '#1E293B',
     textSecondary: '#64748B',
     textOnPrimary: '#FFFFFF',
-    
+
     border: '#E2E8F0',
     borderLight: '#EEE',
-    
+
     inputBackground: '#FFFFFF',
     inputBorder: '#3B82F6',
     inputDisabled: '#9CA3AF',
@@ -1013,21 +805,21 @@ const theme = {
     md: 8,
     lg: 12,
   },
-};
+} as const;
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: theme.colors.background 
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.background
   },
-  keyboardAvoidingView: { 
-    flex: 1 
+  keyboardAvoidingView: {
+    flex: 1
   },
-  scrollView: { 
-    flex: 1 
+  scrollView: {
+    flex: 1
   },
-  scrollViewContent: { 
-    paddingBottom: 100 
+  scrollViewContent: {
+    paddingBottom: 100
   },
   loadingContainer: {
     flex: 1,
@@ -1077,7 +869,31 @@ const styles = StyleSheet.create({
     fontFamily: "monospace",
     lineHeight: 20,
   },
-  
+
+  syncBanner: {
+    backgroundColor: theme.colors.warning,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: theme.spacing.md,
+  },
+  syncBannerText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: theme.font.size.xs,
+  },
+  syncButton: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  syncButtonText: {
+    color: theme.colors.warning,
+    fontWeight: 'bold',
+    fontSize: theme.font.size.xs,
+  },
   progressHeader: {
     backgroundColor: theme.colors.primaryLight,
     paddingVertical: 12,
@@ -1121,23 +937,23 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.tabInactive,
     alignItems: "center",
   },
-  activeTab: { 
-    backgroundColor: theme.colors.primary 
+  activeTab: {
+    backgroundColor: theme.colors.primary
   },
   confirmedTab: {
     backgroundColor: theme.colors.successLight,
     borderColor: theme.colors.success,
     borderWidth: 1,
   },
-  tabText: { 
-    color: theme.colors.tabInactiveText, 
+  tabText: {
+    color: theme.colors.tabInactiveText,
     fontWeight: theme.font.weight.medium,
     fontSize: theme.font.size.sm,
     textAlign: "center",
   },
-  activeTabText: { 
-    color: theme.colors.textOnPrimary, 
-    fontWeight: theme.font.weight.bold 
+  activeTabText: {
+    color: theme.colors.textOnPrimary,
+    fontWeight: theme.font.weight.bold
   },
   confirmedTabText: {
     color: theme.colors.successDark,
@@ -1164,9 +980,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: theme.spacing.xs,
   },
-  customerName: { 
-    fontSize: theme.font.size.xl, 
-    fontWeight: theme.font.weight.bold, 
+  customerName: {
+    fontSize: theme.font.size.xl,
+    fontWeight: theme.font.weight.bold,
     color: theme.colors.textPrimary,
     flex: 1,
   },
@@ -1183,20 +999,20 @@ const styles = StyleSheet.create({
     fontSize: theme.font.size.md,
     fontWeight: theme.font.weight.bold,
   },
-  customerAddress: { 
-    color: theme.colors.textSecondary, 
-    fontSize: theme.font.size.sm, 
+  customerAddress: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.font.size.sm,
     lineHeight: 20
   },
-  
-  subsection: { 
-    marginTop: theme.spacing.xl 
+
+  subsection: {
+    marginTop: theme.spacing.xl
   },
-  sectionTitle: { 
-    fontSize: theme.font.size.md, 
-    fontWeight: theme.font.weight.bold, 
-    marginBottom: theme.spacing.sm, 
-    color: theme.colors.textPrimary 
+  sectionTitle: {
+    fontSize: theme.font.size.md,
+    fontWeight: theme.font.weight.bold,
+    marginBottom: theme.spacing.sm,
+    color: theme.colors.textPrimary
   },
 
   listContainer: {
@@ -1254,13 +1070,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
-  
+
   textInputDisabled: {
     color: theme.colors.inputDisabled,
     backgroundColor: theme.colors.inputDisabledBg,
     borderColor: theme.colors.border,
   },
-  
+
   priceInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1330,7 +1146,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     lineHeight: 16,
   },
-  
+
   grandTotalText: {
     fontSize: theme.font.size.lg,
     fontWeight: theme.font.weight.bold,

@@ -20,6 +20,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Toast from 'react-native-toast-message'
+import apiClient from '../services/apiClient'
 
 
 interface Product {
@@ -41,7 +42,7 @@ const MorningStockScreen = () => {
   const router = useRouter()
   const workerId = params.workerId as string
 
-  const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
+
 
   const [products, setProducts] = useState<Product[]>([])
   const [quantities, setQuantities] = useState<{ [key: number]: string }>({})
@@ -64,14 +65,8 @@ const MorningStockScreen = () => {
     try {
       const name = await AsyncStorage.getItem('workerName')
       setWorkerName(name || `Worker ${workerId}`)
-      const token = await AsyncStorage.getItem('authToken')
-      const response = await fetch(`${API_BASE_URL}/products/products-with-latest-inventory`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-      })
-      const result = await response.json()
+      const response = await apiClient.get('/products/products-with-latest-inventory') as any
+      const result = response
       if (result.success && Array.isArray(result.data)) {
         const validProducts = result.data.filter((p: Product) => p && p.inventory && p.inventory.inventoryId)
         setProducts(validProducts)
@@ -92,7 +87,7 @@ const MorningStockScreen = () => {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [workerId, API_BASE_URL])
+  }, [workerId])
 
   useEffect(() => {
     fetchData(false)
@@ -114,7 +109,6 @@ const MorningStockScreen = () => {
     }
     setSubmitting(true)
     try {
-      const token = await AsyncStorage.getItem('authToken')
       const pickItems = Object.entries(quantities)
         .filter(([_, qty]) => (parseInt(qty) || 0) > 0)
         .map(([inventoryId, qty]) => ({
@@ -122,16 +116,11 @@ const MorningStockScreen = () => {
           totalPickedQuantity: parseInt(qty)
         }))
 
-      const response = await fetch(`${API_BASE_URL}/daily-activity-wi/pick-quantities`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ workerId: parseInt(workerId), pickItems })
-      })
-
-      const result = await response.json()
+      const response = await apiClient.post('/daily-activity-wi/pick-quantities', {
+        workerId: parseInt(workerId),
+        pickItems
+      }) as any
+      const result = response
       if (result.success) {
         Toast.show({ type: 'success', text1: 'Success', text2: 'Stock submitted!' })
         setTimeout(() => {

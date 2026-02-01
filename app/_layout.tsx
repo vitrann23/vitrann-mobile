@@ -1,11 +1,12 @@
 // app/_layout.tsx
 import { Stack } from 'expo-router'
 import Toast from 'react-native-toast-message'
+import { QueryProvider } from '../providers/QueryProvider'
 
 export default function RootLayout() {
   return (
-    <>
-      <Stack 
+    <QueryProvider>
+      <Stack
         screenOptions={{
           headerShown: false, // Hide headers globally
         }}
@@ -17,9 +18,9 @@ export default function RootLayout() {
         <Stack.Screen name="CashDetailsScreen" />
         <Stack.Screen name="DailySummaryScreen" />
       </Stack>
-      
+
       {/* Toast component - this makes it available globally */}
       <Toast />
-    </>
+    </QueryProvider>
   )
 }

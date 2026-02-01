@@ -18,6 +18,7 @@ import {
 } from "react-native"
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import Toast from 'react-native-toast-message'
+import apiClient from '../services/apiClient'
 
 const notes = [
   { label: "₹500", value: 500, color: "#87CEEB" },
@@ -35,37 +36,15 @@ const coins = [
   { label: "₹1", value: 1, color: "#87CEEB" },
 ]
 
-const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
+
 
 // API function to submit total amount
 const submitTotalAmount = async (amount: number) => {
   try {
-    const token = await AsyncStorage.getItem('authToken')
-    if (!token) {
-      throw new Error('No authentication token found')
-    }
-
-    if (!API_BASE_URL) {
-      throw new Error('API base URL is not configured.')
-    }
-
-    const response = await fetch(`${API_BASE_URL}/deliveries/total-amount`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        amount: amount
-      }),
-    })
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return data
+    const response = await apiClient.post('/deliveries/total-amount', {
+      amount: amount
+    }) as any
+    return response
   } catch (error) {
     console.error('API request failed:', error)
     throw error
@@ -145,13 +124,13 @@ export default function CashDetailsScreen() {
 
         // Navigate to next screen with cash details
         const cashDetails = { noteCounts, coinCounts, totalAmount }
-        
+
         // Small delay to show success message
         setTimeout(() => {
           router.push({
             pathname: "/ReturnedStocksScreen",
-            params: { 
-              ...params, 
+            params: {
+              ...params,
               cashDetails: JSON.stringify(cashDetails),
               submittedAmount: totalAmount.toString()
             },
@@ -164,7 +143,7 @@ export default function CashDetailsScreen() {
 
     } catch (error) {
       console.error('Error submitting total amount:', error)
-      
+
       Toast.show({
         type: 'error',
         text1: 'Submission Failed',
@@ -230,13 +209,13 @@ export default function CashDetailsScreen() {
             )}
           </View>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.nextButton, 
+              styles.nextButton,
               submitting && styles.nextButtonDisabled,
               totalAmount <= 0 && styles.nextButtonInactive
-            ]} 
-            onPress={onNext} 
+            ]}
+            onPress={onNext}
             activeOpacity={0.85}
             disabled={submitting || totalAmount <= 0}
           >

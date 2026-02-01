@@ -17,6 +17,7 @@ import {
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import Toast from 'react-native-toast-message'
+import apiClient from '../services/apiClient'
 
 // Types
 type InventoryItem = {
@@ -51,41 +52,7 @@ type ProductItem = {
   isEdited: boolean
 }
 
-const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
 
-
-// API helper function
-const makeAuthenticatedRequest = async (url: string, options: RequestInit = {}) => {
-  try {
-    const token = await AsyncStorage.getItem('authToken')
-    if (!token) {
-      throw new Error('No authentication token found')
-    }
-
-    if (!API_BASE_URL) {
-      throw new Error('API base URL is not configured.')
-    }
-
-    const response = await fetch(`${API_BASE_URL}${url}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return data
-  } catch (error) {
-    console.error('API request failed:', error)
-    throw error
-  }
-}
 
 export default function ReturnedStocksScreen() {
   const params = useLocalSearchParams()
@@ -107,11 +74,11 @@ export default function ReturnedStocksScreen() {
       setLoading(true)
       setError(null)
 
-      const inventoryResponse = await makeAuthenticatedRequest('/daily-activity-ci/my-inventory')
+      const inventoryResponse = await apiClient.get('/daily-activity-ci/my-inventory') as any
 
       if (inventoryResponse.success && inventoryResponse.data) {
         setInventoryData(inventoryResponse.data)
-        
+
         // Transform inventory data to products with remaining quantities defaulting to 0
         const transformedProducts: ProductItem[] = inventoryResponse.data
           .filter((item: InventoryItem) => item.totalPickedQuantity && item.totalPickedQuantity > 0)
@@ -125,6 +92,9 @@ export default function ReturnedStocksScreen() {
 
         setProducts(transformedProducts)
 
+        // ✅ Save for offline use
+        await AsyncStorage.setItem('offline_inventory_raw', JSON.stringify(inventoryResponse.data))
+
         Toast.show({
           type: 'success',
           text1: 'Inventory Loaded',
@@ -135,16 +105,30 @@ export default function ReturnedStocksScreen() {
       } else {
         throw new Error('Failed to fetch inventory data')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching inventory:', error)
-      setError('Failed to load inventory data')
-      
-      Toast.show({
-        type: 'error',
-        text1: 'Loading Failed',
-        text2: 'Unable to load inventory data',
-        visibilityTime: 3000,
-      })
+
+      const cached = await AsyncStorage.getItem('offline_inventory_raw')
+        || await AsyncStorage.getItem('offline_inventory');
+
+      if (cached) {
+        const data = JSON.parse(cached);
+        setInventoryData(data);
+        const transformedProducts: ProductItem[] = data
+          .filter((item: InventoryItem) => item.totalPickedQuantity && item.totalPickedQuantity > 0)
+          .map((item: InventoryItem) => ({
+            inventoryId: item.inventoryId,
+            productName: item.inventory?.product?.productName || 'Unknown Product',
+            pickedQuantity: item.totalPickedQuantity || 0,
+            remainingQuantity: 0,
+            isEdited: false
+          }))
+        setProducts(transformedProducts)
+        Toast.show({ type: 'info', text1: 'Offline Mode', text2: 'Loaded from cache' })
+        setError(null)
+      } else {
+        setError('Failed to load inventory data')
+      }
     } finally {
       setLoading(false)
     }
@@ -154,7 +138,7 @@ export default function ReturnedStocksScreen() {
   const handleRemainingQuantityChange = (inventoryId: number, newQuantity: string) => {
     const numQuantity = parseInt(newQuantity) || 0
     const product = products.find(p => p.inventoryId === inventoryId)
-    
+
     if (product && numQuantity > product.pickedQuantity) {
       Toast.show({
         type: 'error',
@@ -168,11 +152,11 @@ export default function ReturnedStocksScreen() {
     setProducts(prevProducts =>
       prevProducts.map(product =>
         product.inventoryId === inventoryId
-          ? { 
-              ...product, 
-              remainingQuantity: numQuantity,
-              isEdited: true
-            }
+          ? {
+            ...product,
+            remainingQuantity: numQuantity,
+            isEdited: true
+          }
           : product
       )
     )
@@ -192,12 +176,9 @@ export default function ReturnedStocksScreen() {
         remainingQuantity: product.remainingQuantity
       }))
 
-      const response = await makeAuthenticatedRequest('/daily-activity-wi/remaining-quantities', {
-        method: 'PUT',
-        body: JSON.stringify({
-          remainingItems
-        })
-      })
+      const response = await apiClient.put('/daily-activity-wi/remaining-quantities', {
+        remainingItems
+      }) as any
 
       if (response.success) {
         Toast.show({
@@ -218,7 +199,7 @@ export default function ReturnedStocksScreen() {
 
     } catch (error) {
       console.error('Error updating remaining quantities:', error)
-      
+
       Toast.show({
         type: 'error',
         text1: 'Update Failed',
@@ -254,7 +235,7 @@ export default function ReturnedStocksScreen() {
         <Text style={styles.productLabel} numberOfLines={2}>{item.productName}</Text>
         <Text style={styles.pickedText}>Picked: {item.pickedQuantity}</Text>
       </View>
-      
+
       {/* ✅ RESPONSIVE: Input section with fixed, smaller width */}
       <View style={styles.inputSection}>
         <Text style={styles.inputLabel}>Remaining:</Text>
@@ -316,7 +297,7 @@ export default function ReturnedStocksScreen() {
         <View style={styles.card}>
           <Text style={styles.heading}>Remaining Stock</Text>
           <Text style={styles.subheading}>Enter quantities left after deliveries (default is 0)</Text>
-          
+
           <View style={styles.divider} />
 
           <FlatList
@@ -337,11 +318,11 @@ export default function ReturnedStocksScreen() {
             </Text>
           </View>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.submitButton, 
+              styles.submitButton,
               submitting && styles.submitButtonDisabled
-            ]} 
+            ]}
             onPress={handleSubmitRemaining}
             disabled={submitting}
           >
@@ -367,41 +348,41 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingHorizontal: 20,
   },
-  
+
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  
+
   loadingText: {
     marginTop: 16,
     fontSize: 16,
     color: "#64748B",
     textAlign: "center",
   },
-  
+
   errorContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
   },
-  
+
   errorText: {
     color: "#EF4444",
     fontSize: 16,
     textAlign: "center",
     marginBottom: 20,
   },
-  
+
   retryButton: {
     backgroundColor: "#297BF6",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
   },
-  
+
   retryButtonText: {
     color: "#fff",
     fontWeight: "600",

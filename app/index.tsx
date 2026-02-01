@@ -2,11 +2,10 @@
 
 import { Ionicons } from "@expo/vector-icons"
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import Constants from 'expo-constants'
+import * as SecureStore from 'expo-secure-store'
 import { LinearGradient } from "expo-linear-gradient"
 import { useRouter } from "expo-router"
-import { useState } from "react"
-
+import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
   Image,
@@ -21,8 +20,7 @@ import {
   View
 } from "react-native"
 import Toast from 'react-native-toast-message'
-
-const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
+import apiClient from '../services/apiClient'
 
 interface WorkerLoginResponse {
   success: boolean
@@ -46,6 +44,33 @@ export default function Index() {
   const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
 
+  // Auto-login logic: Check if token exists on mount
+  useEffect(() => {
+    checkLoggedInStatus();
+  }, []);
+
+  const checkLoggedInStatus = async () => {
+    try {
+      let token;
+      if (Platform.OS === 'web') {
+        token = await AsyncStorage.getItem('authToken');
+      } else {
+        token = await SecureStore.getItemAsync('authToken');
+      }
+
+      const workerId = await AsyncStorage.getItem('workerId');
+
+      if (token && workerId) {
+        router.replace({
+          pathname: '/MorningStockScreen',
+          params: { workerId: workerId }
+        });
+      }
+    } catch (e) {
+      console.error('Failed to check login status', e);
+    }
+  };
+
   const handleLogin = async () => {
     // Validation
     if (!phoneNumber.trim()) {
@@ -64,25 +89,18 @@ export default function Index() {
     setIsLoading(true);
 
     try {
-      console.log("Connecting to backend:", API_BASE_URL);
-      const response = await fetch(`${API_BASE_URL}/auth/worker-login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-
-        body: JSON.stringify({
-          phoneNumber: phoneNumber.trim(),
-          password: password,
-        }),
-      });
-
-      const data: WorkerLoginResponse = await response.json();
+      const data = await apiClient.post<WorkerLoginResponse>('/auth/worker-login', {
+        phoneNumber: phoneNumber.trim(),
+        password: password,
+      }) as unknown as WorkerLoginResponse;
 
       if (data.success === true && data.token && data.worker) {
         // Store authentication data
-        await AsyncStorage.setItem('authToken', data.token);
+        if (Platform.OS === 'web') {
+          await AsyncStorage.setItem('authToken', data.token); // Web fallback
+        } else {
+          await SecureStore.setItemAsync('authToken', data.token); // Store token securely on mobile
+        }
         await AsyncStorage.setItem('userType', data.userType);
         await AsyncStorage.setItem('workerId', data.worker.workerId.toString());
         await AsyncStorage.setItem('workerName', `${data.worker.firstName} ${data.worker.lastName}`);
@@ -108,12 +126,12 @@ export default function Index() {
         });
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
       Toast.show({
         type: 'error',
-        text1: 'Connection Error',
-        text2: 'Unable to connect to server. Please check your internet connection.',
+        text1: 'Login Failed',
+        text2: error.message || 'Unable to connect to server. Please check your internet connection.',
       });
     } finally {
       setIsLoading(false);

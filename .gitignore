@@ -84,3 +84,7 @@ yarn-error.*
 
 # Build artifacts
 *.apk
+
+# Local Config
+.env
+build_logs.txt

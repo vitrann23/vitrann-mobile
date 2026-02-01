@@ -1,6 +1,7 @@
 "use client"
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as SecureStore from 'expo-secure-store'
 import Constants from 'expo-constants'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useEffect, useState } from 'react'
@@ -14,6 +15,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Toast from 'react-native-toast-message'
+import apiClient from '../services/apiClient'
 
 // Types
 type ProductSummary = { [name: string]: number }
@@ -54,43 +56,10 @@ type DeliveryData = {
   pickedQuantity: number
   remainingQuantity: number
   deliveredQuantity: number
-  productName: string 
+  productName: string
 }
 
-const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? 'https://theinfranova.com/api';
 
-// API helper function
-const makeAuthenticatedRequest = async (url: string, options: RequestInit = {}) => {
-  try {
-    const token = await AsyncStorage.getItem('authToken')
-    if (!token) {
-      throw new Error('No authentication token found')
-    }
-
-    if (!API_BASE_URL) {
-      throw new Error('API base URL is not configured.')
-    }
-
-    const response = await fetch(`${API_BASE_URL}${url}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return data
-  } catch (error) {
-    console.error('API request failed:', error)
-    throw error
-  }
-}
 
 // Helper functions
 function formatSummaryRows(data: ProductSummary) {
@@ -140,14 +109,14 @@ export default function DailySummaryScreen() {
 
       // Fetch both inventory and cash data simultaneously
       const [inventoryResponse, cashResponse] = await Promise.all([
-        makeAuthenticatedRequest('/daily-activity-ci/my-inventory'),
-        makeAuthenticatedRequest('/deliveries/total-amount')
-      ])
+        apiClient.get('/daily-activity-ci/my-inventory'),
+        apiClient.get('/deliveries/total-amount')
+      ]) as any[]
 
       // Process inventory data
       if (inventoryResponse.success && inventoryResponse.data) {
         setInventoryData(inventoryResponse.data)
-        
+
         // Calculate delivery data: Picked - Remaining = Delivered
         const calculatedDeliveryData: DeliveryData[] = inventoryResponse.data
           .filter((item: InventoryItem) => item.totalPickedQuantity && item.totalPickedQuantity > 0)
@@ -185,7 +154,7 @@ export default function DailySummaryScreen() {
     } catch (error) {
       console.error('Error fetching summary data:', error)
       setError('Failed to load summary data')
-      
+
       Toast.show({
         type: 'error',
         text1: 'Loading Failed',
@@ -196,6 +165,26 @@ export default function DailySummaryScreen() {
       setLoading(false)
     }
   }
+
+  const handleLogout = async () => {
+    try {
+      await SecureStore.deleteItemAsync('authToken');
+      await AsyncStorage.multiRemove(['workerId', 'workerName', 'userType']);
+      router.replace('/');
+      Toast.show({
+        type: 'success',
+        text1: 'Logged Out',
+        text2: 'Session cleared successfully',
+      });
+    } catch (e) {
+      console.error('Logout failed', e);
+      Toast.show({
+        type: 'error',
+        text1: 'Logout Failed',
+        text2: 'Please try again',
+      });
+    }
+  };
 
   const submitDailySummary = async () => {
     setSubmitting(true)
@@ -214,10 +203,7 @@ export default function DailySummaryScreen() {
       console.log('Submitting daily summary:', summaryData)
 
       // You can add API call here to submit final summary
-      // await makeAuthenticatedRequest('/daily-summary/submit', {
-      //   method: 'POST',
-      //   body: JSON.stringify(summaryData)
-      // })
+      // await apiClient.post('/daily-summary/submit', summaryData)
 
       Toast.show({
         type: 'success',
@@ -363,6 +349,13 @@ export default function DailySummaryScreen() {
           ) : (
             <Text style={styles.submitBtnText}>✅ Final Submit for Day</Text>
           )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={handleLogout}
+        >
+          <Text style={styles.logoutBtnText}>🚪 Logout / Switch Worker</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -656,5 +649,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  logoutBtn: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 20
+  },
+  logoutBtnText: {
+    color: '#64748B',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 })
