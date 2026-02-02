@@ -21,6 +21,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Toast from 'react-native-toast-message'
 import apiClient from '../services/apiClient'
+import * as SecureStore from 'expo-secure-store'
 
 
 interface Product {
@@ -88,6 +89,21 @@ const MorningStockScreen = () => {
       setRefreshing(false)
     }
   }, [workerId])
+
+  const handleLogout = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        await AsyncStorage.removeItem('authToken');
+        await AsyncStorage.removeItem('workerId');
+      } else {
+        await SecureStore.deleteItemAsync('authToken');
+        await SecureStore.deleteItemAsync('workerId');
+      }
+      router.replace('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   useEffect(() => {
     fetchData(false)
@@ -158,6 +174,12 @@ const MorningStockScreen = () => {
             <Text style={styles.headerTitleText}>Morning Stock</Text>
             <Text style={styles.dateText}>{currentDate}</Text>
           </View>
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={handleLogout}
+          >
+            <Ionicons name="exit-outline" size={24} color="#EF4444" />
+          </TouchableOpacity>
         </View>
 
         <ScrollView
@@ -255,6 +277,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
+    position: 'relative',
+  },
+  logoutButton: {
+    position: 'absolute',
+    right: 20,
+    top: 30,
+    padding: 10,
   },
   headerTextContainer: {
     alignItems: 'center',
