@@ -127,7 +127,7 @@ export default function CashDetailsScreen() {
         // Small delay to show success message
         setTimeout(() => {
           router.push({
-            pathname: "/ReturnedStocksScreen",
+            pathname: "/DailySummaryScreen",
             params: {
               ...params,
               cashDetails: JSON.stringify(cashDetails),

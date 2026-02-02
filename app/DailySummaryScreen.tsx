@@ -52,36 +52,27 @@ type CashRecord = {
   amount: number
 }
 
-type DeliveryData = {
-  pickedQuantity: number
-  remainingQuantity: number
-  deliveredQuantity: number
+type StockDetail = {
   productName: string
+  totalStock: number
+  deliveredStock: number
+  variance: number
+}
+
+type SummaryData = {
+  totalProducts: number
+  totalPickedQuantity: number
+  totalRemainingQuantity: number
+  completedProducts: number
+  pendingProducts: number
+  totalValue: number
+  paymentFromCustomer: number
+  stockDetails: StockDetail[]
 }
 
 
 
-// Helper functions
-function formatSummaryRows(data: ProductSummary) {
-  const rows = Object.entries(data)
-    .filter(([_, qty]) => qty !== undefined && qty !== null && Number(qty) > 0)
-    .map(([name, qty]) => (
-      <View key={name} style={styles.summaryRow}>
-        <Text style={styles.productName}>{name}:</Text>
-        <Text style={styles.productQty}>{qty} packets</Text>
-      </View>
-    ))
-
-  if (rows.length === 0) {
-    return <Text style={styles.noProducts}>No products</Text>
-  }
-
-  return rows
-}
-
-function totalPackets(data: ProductSummary) {
-  return Object.values(data).reduce((sum, val) => sum + Number(val), 0)
-}
+// Helper functions removed as they are no longer used by the Table UI
 
 export default function DailySummaryScreen() {
   const params = useLocalSearchParams()
@@ -89,7 +80,7 @@ export default function DailySummaryScreen() {
 
   // State management
   const [inventoryData, setInventoryData] = useState<InventoryItem[]>([])
-  const [deliveryData, setDeliveryData] = useState<DeliveryData[]>([])
+  const [summaryData, setSummaryData] = useState<SummaryData | null>(null)
   const [cashRecord, setCashRecord] = useState<CashRecord | null>(null) // ✅ UPDATED: Single cash record
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -107,40 +98,21 @@ export default function DailySummaryScreen() {
       setLoading(true)
       setError(null)
 
-      // Fetch both inventory and cash data simultaneously
-      const [inventoryResponse, cashResponse] = await Promise.all([
-        apiClient.get('/daily-activity-ci/my-inventory'),
+      // Fetch both summary and cash data simultaneously
+      const [summaryResponse, cashResponse] = await Promise.all([
+        apiClient.get('/daily-activity-ci/my-inventory-summary'),
         apiClient.get('/deliveries/total-amount')
       ]) as any[]
 
-      // Process inventory data
-      if (inventoryResponse.success && inventoryResponse.data) {
-        setInventoryData(inventoryResponse.data)
-
-        // Calculate delivery data: Picked - Remaining = Delivered
-        const calculatedDeliveryData: DeliveryData[] = inventoryResponse.data
-          .filter((item: InventoryItem) => item.totalPickedQuantity && item.totalPickedQuantity > 0)
-          .map((item: InventoryItem) => {
-            const pickedQuantity = item.totalPickedQuantity || 0
-            const remainingQuantity = remainingFromParams[item.inventory.product.productName] || 0
-            const deliveredQuantity = pickedQuantity - remainingQuantity
-
-            return {
-              pickedQuantity,
-              remainingQuantity,
-              deliveredQuantity,
-              productName: item.inventory.product.productName
-            }
-          })
-
-        setDeliveryData(calculatedDeliveryData)
+      // Process summary data
+      if (summaryResponse.success && summaryResponse.data) {
+        setSummaryData(summaryResponse.data)
       }
 
-      // ✅ UPDATED: Process single cash record from backend
+      // Process cash record
       if (cashResponse.success && cashResponse.data) {
         setCashRecord(cashResponse.data)
       } else {
-        // Handle case where no cash record exists
         setCashRecord(null)
       }
 
@@ -190,59 +162,38 @@ export default function DailySummaryScreen() {
     setSubmitting(true)
 
     try {
-      // Prepare summary data
-      const summaryData = {
-        deliveryData,
-        cashRecord,
-        totalPicked: deliveryData.reduce((sum, item) => sum + item.pickedQuantity, 0),
-        totalDelivered: deliveryData.reduce((sum, item) => sum + item.deliveredQuantity, 0),
-        totalRemaining: deliveryData.reduce((sum, item) => sum + item.remainingQuantity, 0),
-        date: new Date().toISOString().split('T')[0]
+      // Logic: Tell backend to save the calculated variances
+      const response = await apiClient.post('/daily-activity-ci/submit-summary', {}) as any
+
+      if (response.success) {
+        Toast.show({
+          type: 'success',
+          text1: 'Summary Submitted',
+          text2: 'Stock remaining quantities saved successfully',
+          visibilityTime: 3000,
+        })
+
+        // Navigate to home or login screen
+        setTimeout(() => {
+          router.replace('/')
+        }, 2000)
+      } else {
+        throw new Error(response.message || 'Failed to submit summary')
       }
 
-      console.log('Submitting daily summary:', summaryData)
-
-      // You can add API call here to submit final summary
-      // await apiClient.post('/daily-summary/submit', summaryData)
-
-      Toast.show({
-        type: 'success',
-        text1: 'Summary Submitted',
-        text2: 'Daily summary completed successfully',
-        visibilityTime: 3000,
-      })
-
-      // Navigate to home or login screen
-      setTimeout(() => {
-        router.replace('/')
-      }, 2000)
-
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting summary:', error)
 
       Toast.show({
         type: 'error',
         text1: 'Submission Failed',
-        text2: 'Unable to submit daily summary',
+        text2: error.message || 'Unable to submit daily summary',
         visibilityTime: 3000,
       })
     } finally {
       setSubmitting(false)
     }
   }
-
-  // Convert delivery data to ProductSummary format for display
-  const pickedSummary: ProductSummary = Object.fromEntries(
-    deliveryData.map(item => [item.productName, item.pickedQuantity])
-  )
-
-  const deliveredSummary: ProductSummary = Object.fromEntries(
-    deliveryData.map(item => [item.productName, item.deliveredQuantity])
-  )
-
-  const remainingSummary: ProductSummary = Object.fromEntries(
-    deliveryData.map(item => [item.productName, item.remainingQuantity])
-  )
 
   // Loading screen
   if (loading) {
@@ -275,64 +226,87 @@ export default function DailySummaryScreen() {
       <ScrollView contentContainerStyle={styles.wrapper}>
         <Text style={styles.heading}>📊 Daily Summary</Text>
 
-        {/* Picked/Sent Section */}
-        <View style={styles.sectionBox}>
-          <Text style={styles.sectionLabel}>📦 Picked/Sent:</Text>
-          {formatSummaryRows(pickedSummary)}
-          <Text style={styles.totalText}>Total: {totalPackets(pickedSummary)} packets</Text>
-        </View>
-
-        {/* Delivered Section */}
-        <View style={styles.sectionBox}>
-          <Text style={styles.sectionLabel}>🚚 Delivered:</Text>
-          {formatSummaryRows(deliveredSummary)}
-          <Text style={styles.totalText}>Total: {totalPackets(deliveredSummary)} packets</Text>
-        </View>
-
-        {/* Remaining Section */}
-        <View style={styles.sectionBox}>
-          <Text style={styles.sectionLabel}>📋 Remaining:</Text>
-          {formatSummaryRows(remainingSummary)}
-          <Text style={styles.totalText}>Total: {totalPackets(remainingSummary)} packets</Text>
-        </View>
-
-        {/* ✅ UPDATED: Enhanced Cash Collection Section */}
-        <View style={[styles.sectionBox, styles.paymentsBox]}>
-          <View style={styles.cashHeader}>
-            <Text style={styles.paymentsLabel}>💰 Cash Collection Summary</Text>
+        {/* Stock Details Table - 4 Columns */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Stock Details</Text>
           </View>
-
-          {cashRecord ? (
-            <View style={styles.cashDetails}>
-              <View style={styles.cashRow}>
-                <Text style={styles.cashRowLabel}>Submitted Amount:</Text>
-                <Text style={styles.cashRowValue}>₹{cashRecord.amount}</Text>
-              </View>
-
-
-              <View style={styles.cashDateRow}>
-                <Text style={styles.cashDateText}>
-                  Recorded on: {new Date(cashRecord.date).toLocaleDateString('en-IN', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
+          <View style={styles.table}>
+            <View style={[styles.tableHeader, styles.stockTableHeader]}>
+              <Text style={[styles.columnHeader, { flex: 2 }]}>Product</Text>
+              <Text style={[styles.columnHeader, { flex: 1, textAlign: 'center' }]}>Total</Text>
+              <Text style={[styles.columnHeader, { flex: 1, textAlign: 'center' }]}>Deliv.</Text>
+              <Text style={[styles.columnHeader, { flex: 1, textAlign: 'right' }]}>Var.</Text>
+            </View>
+            {summaryData?.stockDetails.map((item, index) => (
+              <View key={index} style={styles.tableRow}>
+                <Text style={[styles.cell, { flex: 2 }]}>{item.productName}</Text>
+                <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>{item.totalStock}</Text>
+                <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>{item.deliveredStock}</Text>
+                <Text style={[styles.cell, { flex: 1, textAlign: 'right', fontWeight: '700', color: item.variance !== 0 ? '#EF4444' : '#16A34A' }]}>
+                  {item.variance}
                 </Text>
               </View>
-            </View>
-          ) : (
-            <View style={styles.noCashContainer}>
-              <Text style={styles.noCashText}>No cash record found for today</Text>
-              <Text style={styles.noCashSubtext}>Cash amount will be recorded when submitted</Text>
-            </View>
-          )}
+            ))}
+            {(!summaryData || summaryData.stockDetails.length === 0) && (
+              <Text style={styles.noProducts}>No stock data available</Text>
+            )}
+          </View>
         </View>
 
+        {/* Payment Details Table - 3 Columns */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Payment Details</Text>
+          </View>
+          <View style={styles.table}>
+            <View style={[styles.tableHeader, styles.paymentTableHeader]}>
+              <Text style={[styles.columnHeader, { flex: 2 }]}>Detail</Text>
+              <Text style={[styles.columnHeader, { flex: 1.5, textAlign: 'right' }]}>Amount (₹)</Text>
+              <Text style={[styles.columnHeader, { flex: 1, textAlign: 'right' }]}>Var.</Text>
+            </View>
 
+            <View style={styles.tableRow}>
+              <Text style={[styles.cell, { flex: 2 }]}>From Customer</Text>
+              <Text style={[styles.cell, { flex: 1.5, textAlign: 'right' }]}>
+                {summaryData?.paymentFromCustomer.toLocaleString('en-IN') || '0'}
+              </Text>
+              <Text style={[styles.cell, { flex: 1, textAlign: 'right', color: '#94A3B8' }]}>-</Text>
+            </View>
+
+            <View style={styles.tableRow}>
+              <Text style={[styles.cell, { flex: 2 }]}>In Hand (Submitted)</Text>
+              <Text style={[styles.cell, { flex: 1.5, textAlign: 'right' }]}>
+                {cashRecord?.amount.toLocaleString('en-IN') || '0'}
+              </Text>
+              <Text style={[styles.cell, { flex: 1, textAlign: 'right', color: '#94A3B8' }]}>-</Text>
+            </View>
+
+            <View style={[styles.tableRow, { backgroundColor: '#F8FAFC', borderTopWidth: 2, borderTopColor: '#E2E8F0' }]}>
+              <Text style={[styles.cell, { flex: 2, fontWeight: '800', color: '#1E293B' }]}>Net Variance</Text>
+              <Text style={[styles.cell, { flex: 1.5, textAlign: 'right', color: '#94A3B8' }]}>-</Text>
+              <Text style={[styles.cell, { flex: 1, textAlign: 'right', fontWeight: '900', color: (summaryData?.paymentFromCustomer || 0) - (cashRecord?.amount || 0) !== 0 ? '#EF4444' : '#16A34A' }]}>
+                {(summaryData?.paymentFromCustomer || 0) - (cashRecord?.amount || 0)}
+              </Text>
+            </View>
+          </View>
+        </View>
 
         {/* Submit Button */}
+        <TouchableOpacity
+          style={[styles.submitBtn, { backgroundColor: '#297BF6', marginBottom: 12 }]}
+          onPress={() => {
+            Toast.show({
+              type: 'info',
+              text1: 'Preview Mode',
+              text2: 'This screen is your final preview before submission.',
+              visibilityTime: 3000,
+            })
+          }}
+        >
+          <Text style={styles.submitBtnText}>🔍 Preview Summary</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={[
             styles.submitBtn,
@@ -342,7 +316,7 @@ export default function DailySummaryScreen() {
           disabled={submitting}
         >
           {submitting ? (
-            <View style={styles.loadingButtonContainer}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <ActivityIndicator color="#fff" size="small" />
               <Text style={styles.submitBtnText}>Submitting...</Text>
             </View>
@@ -423,246 +397,115 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  sectionBox: {
+  section: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1E293B',
+    letterSpacing: -0.5,
+  },
+  table: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
     elevation: 4,
     shadowColor: '#000',
     shadowOpacity: 0.1,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-  },
-
-  sectionLabel: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#222831',
-    marginBottom: 8,
-  },
-
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-
-  productName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2B2F43',
-    flex: 1,
-  },
-
-  productQty: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#297BF6',
-  },
-
-  noProducts: {
-    fontSize: 15,
-    fontStyle: 'italic',
-    color: '#8B9BB7',
-    marginVertical: 6,
-    textAlign: 'center',
-  },
-
-  totalText: {
-    marginTop: 8,
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#16A34A',
-    textAlign: 'right',
-  },
-
-  // ✅ UPDATED: Enhanced cash section styles
-  paymentsBox: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#16A34A',
-    borderWidth: 1,
-  },
-
-  cashHeader: {
-    marginBottom: 12,
-  },
-
-  paymentsLabel: {
-    fontWeight: 'bold',
-    fontSize: 18,
-    color: '#119E49',
-    textAlign: 'center',
-  },
-
-  cashDetails: {
-    gap: 8,
-  },
-
-  cashRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-
-  cashRowLabel: {
-    fontSize: 16,
-    color: '#374151',
-    fontWeight: '500',
-  },
-
-  cashRowValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#16A34A',
-  },
-
-  discrepancyRow: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-    marginTop: 4,
-  },
-
-  discrepancyLabel: {
-    fontSize: 16,
-    color: '#92400E',
-    fontWeight: '600',
-  },
-
-  discrepancyValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#92400E',
-  },
-
-  discrepancyText: {
-    color: '#D97706',
-  },
-
-  cashDateRow: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#D1FAE5',
-  },
-
-  cashDateText: {
-    fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-
-  noCashContainer: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-
-  noCashText: {
-    fontSize: 16,
-    color: '#6B7280',
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-
-  noCashSubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
-  },
-
-  // ✅ UPDATED: Enhanced statistics section
-  statisticsBox: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    marginBottom: 16,
-    elevation: 2,
-    borderColor: '#2563EB',
-    borderWidth: 1,
-  },
-
-  statisticsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1E40AF',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-
-  statLabel: {
-    fontSize: 16,
-    color: '#475569',
-    fontWeight: '500',
-  },
-
-  statValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1E40AF',
-  },
-
-  cashCollectedText: {
-    color: '#16A34A',
-  },
-
-  cashPendingText: {
-    color: '#F59E0B',
-  },
-
-  submitBtn: {
-    backgroundColor: '#16A34A',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 12,
-    elevation: 6,
-    shadowColor: '#16A34A',
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
-  },
-
-  submitBtnDisabled: {
-    backgroundColor: '#F59E0B',
-  },
-
-  submitBtnText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 18,
-    letterSpacing: 0.15,
-  },
-
-  loadingButtonContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  logoutBtn: {
-    backgroundColor: '#F1F5F9',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    marginBottom: 20
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  stockTableHeader: {
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  paymentTableHeader: {
+    backgroundColor: '#F0F9FF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#BAE6FD',
+  },
+  columnHeader: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    alignItems: 'center',
+  },
+  cell: {
+    fontSize: 15,
+    color: '#334155',
+    fontWeight: '500',
+  },
+  totalBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  noProducts: {
+    padding: 24,
+    textAlign: 'center',
+    color: '#94A3B8',
+    fontStyle: 'italic',
+  },
+  submitBtn: {
+    backgroundColor: '#16A34A',
+    borderRadius: 14,
+    paddingVertical: 18,
+    alignItems: 'center',
+    marginTop: 12,
+    elevation: 8,
+    shadowColor: '#16A34A',
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  submitBtnDisabled: {
+    backgroundColor: '#94A3B8',
+  },
+  submitBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 18,
+    letterSpacing: 0.5,
+  },
+  logoutBtn: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 40,
   },
   logoutBtnText: {
-    color: '#64748B',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
+    color: '#94A3B8',
+    fontWeight: '600',
+    fontSize: 15,
+    textDecorationLine: 'underline',
+  }
 })

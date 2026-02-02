@@ -854,8 +854,26 @@ export default function CustomerDeliveryScreen() {
 
               <TouchableOpacity
                 style={styles.collectButton}
-                onPress={() => {
-                  Toast.show({ type: 'success', text1: 'Payment Marked' });
+                onPress={async () => {
+                  try {
+                    const amount = Number(paymentAmount) || totalPayment;
+                    const response = await apiClient.post('/deliveries/b2b-payment', {
+                      customerId: customer.customerId,
+                      amount: amount
+                    }) as any;
+
+                    if (response.id || response.customerId) {
+                      Toast.show({ type: 'success', text1: 'Payment Recorded', text2: `₹${amount} collected` });
+                      // Update local state to show it was confirmed? Or just toast.
+                      // Usually B2B collection is confirmed upon delivery confirm, 
+                      // but this specific button allows manual entry.
+                    } else {
+                      throw new Error('Failed to record payment');
+                    }
+                  } catch (err) {
+                    console.error('B2B Payment Error:', err);
+                    Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to record payment' });
+                  }
                 }}
               >
                 <Text style={styles.collectButtonText}>Collect</Text>
