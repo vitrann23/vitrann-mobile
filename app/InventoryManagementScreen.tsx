@@ -10,13 +10,16 @@ import {
     KeyboardAvoidingView,
     Platform,
     StatusBar,
+    RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import apiClient from '../services/apiClient';
 import { useInventory } from '../hooks/useInventory';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Mock Data
 // Product Interface
@@ -44,13 +47,25 @@ type TabType = 'ADD' | 'TRANSFER' | 'PURCHASE';
 
 export default function InventoryManagementScreen() {
     const router = useRouter();
+    const queryClient = useQueryClient();
     const insets = useSafeAreaInsets();
     const { customerName, workerName: currentWorkerName, initialTab } = useLocalSearchParams();
 
     const [products, setProducts] = useState<Product[]>([]);
     const [workers, setWorkers] = useState<Worker[]>([]);
     const [loading, setLoading] = useState(true);
-    const { data: inventoryData } = useInventory();
+    const { data: inventoryData, refetch: refetchInventory } = useInventory();
+    const [refreshing, setRefreshing] = useState(false);
+
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await Promise.all([
+            fetchProducts(),
+            fetchWorkers(),
+            refetchInventory()
+        ]);
+        setRefreshing(false);
+    };
 
     // Initialize with passed tab or default to ADD
     const [activeTab, setActiveTab] = useState<TabType>((initialTab as TabType) || 'ADD');
@@ -59,42 +74,42 @@ export default function InventoryManagementScreen() {
     const [manualAmount, setManualAmount] = useState('');
     const [showWorkerDropdown, setShowWorkerDropdown] = useState(false);
 
-    // Fetch Products on Mount
+    const fetchProducts = async () => {
+        try {
+            const response = await apiClient.get('/products/products-with-latest-inventory') as any;
+            if (response.success && Array.isArray(response.data)) {
+                // Filter valid products like MorningStockScreen does
+                const validProducts = response.data.filter((p: Product) => p && p.inventory && p.inventory.inventoryId);
+                setProducts(validProducts);
+            } else {
+                Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to load products' });
+            }
+        } catch (error) {
+            console.error('Error fetching products:', error);
+            Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to fetch products' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchWorkers = async () => {
+        try {
+            const response = await apiClient.get('/workers/list/public') as any;
+            // Handle different response structures
+            if (Array.isArray(response)) {
+                setWorkers(response);
+            } else if (response.data && Array.isArray(response.data)) {
+                setWorkers(response.data);
+            } else {
+                console.log('Unexpected worker response:', response);
+            }
+        } catch (error) {
+            console.error('Error fetching workers:', error);
+        }
+    };
+
+    // Fetch on Mount
     React.useEffect(() => {
-        const fetchProducts = async () => {
-            try {
-                const response = await apiClient.get('/products/products-with-latest-inventory') as any;
-                if (response.success && Array.isArray(response.data)) {
-                    // Filter valid products like MorningStockScreen does
-                    const validProducts = response.data.filter((p: Product) => p && p.inventory && p.inventory.inventoryId);
-                    setProducts(validProducts);
-                } else {
-                    Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to load products' });
-                }
-            } catch (error) {
-                console.error('Error fetching products:', error);
-                Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to fetch products' });
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        const fetchWorkers = async () => {
-            try {
-                const response = await apiClient.get('/workers/list/public') as any;
-                // Handle different response structures
-                if (Array.isArray(response)) {
-                    setWorkers(response);
-                } else if (response.data && Array.isArray(response.data)) {
-                    setWorkers(response.data);
-                } else {
-                    console.log('Unexpected worker response:', response);
-                }
-            } catch (error) {
-                console.error('Error fetching workers:', error);
-            }
-        };
-
         fetchProducts();
         fetchWorkers();
     }, []);
@@ -123,7 +138,7 @@ export default function InventoryManagementScreen() {
         setManualAmount(totalCalculatedAmount.toString());
     }, [totalCalculatedAmount]);
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         const activeItems = Object.entries(quantities).filter(([_, qty]) => parseInt(qty) > 0);
 
         if (activeItems.length === 0) {
@@ -136,12 +151,88 @@ export default function InventoryManagementScreen() {
             return;
         }
 
-        const message = activeTab === 'ADD' ? 'Products Added' : activeTab === 'TRANSFER' ? 'Transfer Initiated' : 'Purchase Completed';
-        Toast.show({ type: 'success', text1: message, text2: 'Mode: ' + activeTab });
+        if (activeTab === 'PURCHASE' && (!manualAmount || parseFloat(manualAmount) <= 0)) {
+            Toast.show({ type: 'error', text1: 'Invalid Amount', text2: 'Please enter a valid amount' });
+            return;
+        }
 
-        // Reset state after success
-        setQuantities({});
-        setSelectedWorkerId(null);
+        try {
+            setLoading(true);
+            const currentWorkerIdStr = await AsyncStorage.getItem('workerId');
+            if (!currentWorkerIdStr) {
+                Toast.show({ type: 'error', text1: 'Authentication Error', text2: 'Worker ID not found' });
+                return;
+            }
+            const currentWorkerId = parseInt(currentWorkerIdStr);
+
+            let successCount = 0;
+
+            // Process items sequentially to maintain transaction integrity
+            for (const [productIdStr, qtyStr] of activeItems) {
+                const productId = parseInt(productIdStr);
+                const quantity = parseInt(qtyStr);
+
+                // Find inventoryId for product
+                const product = products.find(p => p.productId === productId);
+                if (!product || !product.inventory?.inventoryId) continue;
+
+                const inventoryId = product.inventory.inventoryId;
+
+                let response: any;
+
+                if (activeTab === 'ADD') {
+                    response = await apiClient.post('/inventory/add', {
+                        workerId: currentWorkerId,
+                        inventoryId,
+                        quantity
+                    });
+                } else if (activeTab === 'TRANSFER') {
+                    response = await apiClient.post('/inventory/transfer', {
+                        fromWorkerId: currentWorkerId,
+                        toWorkerId: selectedWorkerId,
+                        inventoryId,
+                        quantity
+                    });
+                } else if (activeTab === 'PURCHASE') {
+                    // Calculate estimated cost per item based on unit price
+                    const itemPrice = parseFloat(product.currentProductPrice) || 0;
+                    const estimatedCost = itemPrice * quantity;
+
+                    response = await apiClient.post('/inventory/purchase', {
+                        workerId: currentWorkerId,
+                        inventoryId,
+                        quantity,
+                        amount: estimatedCost
+                    });
+                }
+
+                if (response && (response.id || response.success)) {
+                    successCount++;
+                }
+            }
+
+            if (successCount > 0) {
+                const actionObj = activeTab === 'ADD' ? 'added' : activeTab === 'TRANSFER' ? 'transferred' : 'purchased';
+                Toast.show({ type: 'success', text1: 'Success', text2: `Successfully ${actionObj} ${successCount} products` });
+
+                // Force refetch of inventory throughout the app
+                await queryClient.invalidateQueries({ queryKey: ['inventory'] });
+
+                // Reset UI
+                setQuantities({});
+                setSelectedWorkerId(null);
+                setManualAmount('');
+            } else {
+                Toast.show({ type: 'error', text1: 'Failed', text2: 'Could not complete operation' });
+            }
+
+        } catch (error: any) {
+            console.error('Inventory Operation Failed:', error);
+            const errorMsg = error.response?.data?.message || 'Operation failed';
+            Toast.show({ type: 'error', text1: 'Error', text2: errorMsg });
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -197,6 +288,9 @@ export default function InventoryManagementScreen() {
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             >
                 <ScrollView
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                    }
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
@@ -259,7 +353,7 @@ export default function InventoryManagementScreen() {
                                         <View style={styles.productInfo}>
                                             <Text style={styles.productName}>{product.productName}</Text>
                                             <Text style={styles.availabilityText}>
-                                                Available: {inventoryData?.find(inv => inv.inventory.product.productId === product.productId)?.totalPickedQuantity ?? '--'}
+                                                Available: {inventoryData?.find(inv => inv.inventory.product.productId === product.productId)?.availableQuantity ?? '--'}
                                             </Text>
                                             <Text style={styles.priceText}>₹ {product.currentProductPrice}/packet</Text>
                                         </View>

@@ -18,7 +18,8 @@ export const useCustomerDelivery = () => {
     const {
         data: inventoryData,
         isLoading: isLoadingInventory,
-        error: errorInventory
+        error: errorInventory,
+        refetch: refetchInventory
     } = useInventory();
 
     const {
@@ -29,6 +30,7 @@ export const useCustomerDelivery = () => {
 
     const [customers, setCustomers] = useState<CustomerForDelivery[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
     // Combine loading states
     const isApiLoading = isLoadingCustomers || isLoadingInventory || isLoadingRelations;
@@ -76,10 +78,13 @@ export const useCustomerDelivery = () => {
         }
     };
 
-    const refetchData = () => {
-        setLoading(true);
-        refetchCustomers();
-        // Invalidate other queries if needed
+    const refetchData = async () => {
+        setRefreshing(true);
+        await Promise.all([
+            refetchCustomers(),
+            refetchInventory()
+        ]);
+        setRefreshing(false);
     };
 
     return {
@@ -89,6 +94,7 @@ export const useCustomerDelivery = () => {
         loading: loading || isApiLoading,
         error: apiError,
         refetchData,
+        refreshing,
         setCustomers // Exposed for local updates (optimistic UI)
     };
 };

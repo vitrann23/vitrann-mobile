@@ -55,6 +55,10 @@ export interface WorkerInventory {
     workerId: number;
     inventoryId: number;
     totalPickedQuantity: number | null;
+    totalDeliveredQuantity?: number;
+    transferredInQuantity?: number;
+    transferredOutQuantity?: number;
+    availableQuantity?: number; // Computed by backend
     remainingQuantity: number | null;
     date: string;
     inventory: Inventory;

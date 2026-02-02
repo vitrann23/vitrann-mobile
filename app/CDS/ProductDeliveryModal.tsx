@@ -21,7 +21,7 @@ const ProductIcon = ({ imageUrl, productName, style }: {
 }) => {
   if (imageUrl) {
     return (
-      <Image 
+      <Image
         source={{ uri: imageUrl }}
         style={[styles.productIconImage, style]}
         onError={() => console.log(`Failed to load image: ${imageUrl}`)}
@@ -60,6 +60,7 @@ interface WorkerInventory {
   workerId: number;
   inventoryId: number;
   totalPickedQuantity: number | null;
+  availableQuantity?: number; // Computed by backend
   remainingQuantity: number | null;
   date: string;
   inventory: {
@@ -103,12 +104,14 @@ export const ProductDeliveryModal: React.FC<ProductDeliveryModalProps> = ({
   // Get available products from inventory
   const getAvailableProducts = () => {
     return workerInventory
-      .filter(item => item.inventory && (item.totalPickedQuantity || 0) > 0)
+      .filter(item => item.inventory && ((item.availableQuantity ?? item.totalPickedQuantity) || 0) > 0)
       .map(item => ({
         productId: item.inventory!.product.productId,
         productName: item.inventory!.product.productName,
         price: item.inventory!.product.currentProductPrice,
-        availableQty: item.totalPickedQuantity || 0,
+        // Use availableQuantity (Net) if present, else fallback to totalPicked (Gross)
+        // Backend provides availableQuantity which accounts for deliveries.
+        availableQty: item.availableQuantity ?? item.totalPickedQuantity ?? 0,
         imageUrl: item.inventory!.product.imageUrl,
         description: item.inventory!.product.description
       }));
@@ -118,11 +121,17 @@ export const ProductDeliveryModal: React.FC<ProductDeliveryModalProps> = ({
 
   const getTotalDelivered = (productId: number) =>
     customers.reduce(
-      (total, cust) =>
-        total +
-        cust.deliveredItems
-          .filter((item) => item.productId === productId)
-          .reduce((subTotal, item) => subTotal + item.qty, 0),
+      (total, cust) => {
+        // Only count unconfirmed (staged) deliveries. 
+        // Confirmed ones are assumed to be in the backend 'availableQuantity' (after refetch).
+        // If query is stale, we might show higher stock momentarily, but preventing double subtraction is key.
+        if (cust.deliveryConfirmed) return total;
+
+        return total +
+          cust.deliveredItems
+            .filter((item) => item.productId === productId)
+            .reduce((subTotal, item) => subTotal + item.qty, 0);
+      },
       0
     );
 
@@ -248,8 +257,8 @@ export const ProductDeliveryModal: React.FC<ProductDeliveryModalProps> = ({
                     <View key={product.productId} style={styles.productCard}>
                       <View style={styles.productHeader}>
                         <View style={styles.productRow}>
-                          <ProductIcon 
-                            imageUrl={product.imageUrl} 
+                          <ProductIcon
+                            imageUrl={product.imageUrl}
                             productName={product.productName}
                           />
                           <View style={styles.productInfo}>
@@ -545,7 +554,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   doneButtonText: {
-    color: "#fff",  
+    color: "#fff",
     fontWeight: "700",
     fontSize: 16,
   },

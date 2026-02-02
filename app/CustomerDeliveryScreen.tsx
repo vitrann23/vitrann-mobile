@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import Constants from 'expo-constants'
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState, useRef, useMemo, useCallback } from "react"
+import { useQueryClient } from '@tanstack/react-query'
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -18,7 +19,8 @@ import {
   Dimensions,
   Alert,
   FlatList,
-  Image
+  Image,
+  RefreshControl
 } from "react-native"
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import Toast from 'react-native-toast-message'
@@ -41,6 +43,7 @@ export default function CustomerDeliveryScreen() {
   const router = useRouter()
   const { workerId: workerIdParam } = useLocalSearchParams()
   const insets = useSafeAreaInsets()
+  const queryClient = useQueryClient()
 
   // Use new hooks
   const {
@@ -50,6 +53,7 @@ export default function CustomerDeliveryScreen() {
     loading: isLoading,
     error: apiError,
     refetchData,
+    refreshing,
     setCustomers
   } = useCustomerDelivery()
 
@@ -106,10 +110,16 @@ export default function CustomerDeliveryScreen() {
     }
   }, [selectedIdx, customers]);
 
-  // Initial tab selection
+  // Initial tab selection - Jump to first pending customer
+  const hasInitialJumped = useRef(false);
+
   useEffect(() => {
-    if (customers.length > 0 && selectedIdx >= customers.length) {
-      setSelectedIdx(0);
+    if (customers.length > 0 && !hasInitialJumped.current) {
+      const firstPendingIdx = customers.findIndex(c => !c.deliveryConfirmed);
+      if (firstPendingIdx !== -1) {
+        setSelectedIdx(firstPendingIdx);
+      }
+      hasInitialJumped.current = true; // Mark as done so we don't jump while user is browsing
     }
   }, [customers]);
 
@@ -220,6 +230,9 @@ export default function CustomerDeliveryScreen() {
       };
       setCustomers(updatedCustomers);
       AsyncStorage.setItem('offline_customers', JSON.stringify(updatedCustomers));
+
+      // Invalidate inventory cache to fetch latest availableQuantity
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
 
     } catch (error) {
       console.error('Error confirming delivery:', error);
@@ -358,16 +371,21 @@ export default function CustomerDeliveryScreen() {
     if (!itemToUpdate) return;
 
     const inventoryItem = inventory?.find(inv => inv.inventory?.product.productId === itemToUpdate.productId);
-    const totalPicked = inventoryItem?.totalPickedQuantity || 0;
+    // Use availableQuantity (Net) if present, fallback to TotalPicked (Gross)
+    const baseQty = inventoryItem?.availableQuantity ?? inventoryItem?.totalPickedQuantity ?? 0;
 
     const totalDeliveredByAll = customers.reduce((sum, cust) => {
+      // Only count UNCONFIRMED deliveries in this subtraction. 
+      // Confirmed ones are already deducted from 'availableQuantity' by the backend.
+      if (cust.deliveryConfirmed) return sum;
+
       if (cust.id === customer.id) {
         return sum + cust.deliveredItems.filter(i => i.productId === itemToUpdate.productId && i !== itemToUpdate).reduce((s, i) => s + i.qty, 0);
       }
       return sum + cust.deliveredItems.filter(i => i.productId === itemToUpdate.productId).reduce((s, i) => s + i.qty, 0);
     }, 0);
 
-    const maxAvailable = totalPicked - totalDeliveredByAll;
+    const maxAvailable = baseQty - totalDeliveredByAll;
 
     if (newQuantity > maxAvailable) {
       Toast.show({
@@ -405,30 +423,22 @@ export default function CustomerDeliveryScreen() {
     if (!customer) return;
 
     // 1. Gather all items to deliver: 
-    // - Items already in customer.deliveredItems (added via modal/manual)
-    // - Non-zero quantities from associatedProductQuantities
     const finalItemsToDeliver: DeliveredItem[] = [...customer.deliveredItems];
-
     const associatedProducts = getAssociatedProducts();
-    associatedProducts.forEach(invItem => {
+
+    for (const invItem of associatedProducts) {
       const product = invItem.inventory?.product;
-      if (!product) return;
+      if (!product) continue;
 
       const quantityKey = `${customer.customerId}-${product.productId}`;
-
-      const defaultValue = isB2B ? '' : ((invItem.totalPickedQuantity || 0) > 0 ? '0' : ''); // Just a base for checking
-      // For B2C, we should check if they changed it or if it was pre-filled
       const enteredQty = associatedProductQuantities[quantityKey];
 
-      // If B2C and not touched, enteredQty might be undefined.
-      // But we want to submit if there's a pre-filled value or user entered one.
       const associatedQty = customerProductRelations.find(
         rel => rel.customerId === customer.customerId &&
           rel.productId === product.productId &&
           rel.thruDate === null
       )?.quantityAssociated || 0;
 
-      // Logic: If user entered something, use it. If B2C and nothing entered, use associatedQty.
       let qty = 0;
       if (enteredQty !== undefined) {
         qty = parseInt(enteredQty) || 0;
@@ -436,20 +446,41 @@ export default function CustomerDeliveryScreen() {
         qty = associatedQty;
       }
 
-      // Check if already in deliveredItems to avoid duplicates
-      const isAlreadyIncluded = finalItemsToDeliver.some(item => item.productId === product.productId);
+      if (qty > 0) {
+        // Check availability precisely before including
+        const totalDeliveredByAllPending = customers.reduce((sum, cust) => {
+          if (cust.deliveryConfirmed) return sum;
+          return sum + cust.deliveredItems
+            .filter(item => item.productId === product.productId)
+            .reduce((s, i) => s + i.qty, 0);
+        }, 0);
 
-      if (qty > 0 && !isAlreadyIncluded) {
-        finalItemsToDeliver.push({
-          productId: product.productId,
-          name: product.productName,
-          qty: qty,
-          price: Number(product.currentProductPrice) * qty,
-          originalPrice: product.currentProductPrice,
-          isEdited: false
-        });
+        const baseQty = invItem.availableQuantity ?? invItem.totalPickedQuantity ?? 0;
+        const availableNow = baseQty - totalDeliveredByAllPending;
+
+        if (qty > availableNow) {
+          Toast.show({
+            type: 'error',
+            text1: 'Insufficient Stock',
+            text2: `${product.productName}: Needed ${qty}, Available ${availableNow}. Please Add or Purchase more stock.`,
+            visibilityTime: 4000
+          });
+          return; // Stop the whole confirmation
+        }
+
+        const isAlreadyIncluded = finalItemsToDeliver.some(item => item.productId === product.productId);
+        if (!isAlreadyIncluded) {
+          finalItemsToDeliver.push({
+            productId: product.productId,
+            name: product.productName,
+            qty: qty,
+            price: Number(product.currentProductPrice) * qty,
+            originalPrice: product.currentProductPrice,
+            isEdited: false
+          });
+        }
       }
-    });
+    }
 
     if (finalItemsToDeliver.length === 0) {
       if (selectedIdx < customers.length - 1) {
@@ -548,6 +579,14 @@ export default function CustomerDeliveryScreen() {
 
       {/* Header Top Bar */}
       <View style={styles.headerTopBar}>
+        <TouchableOpacity
+          style={styles.syncButton}
+          onPress={refetchData}
+          disabled={refreshing}
+        >
+          <Ionicons name="refresh" size={24} color={refreshing ? "#999" : "#3880FF"} />
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.hamburgerButton}
           onPress={() => setMenuVisible(!menuVisible)}
@@ -656,14 +695,21 @@ export default function CustomerDeliveryScreen() {
                 );
 
                 const totalDelivered = customers.reduce(
-                  (sum, cust) =>
-                    sum +
-                    cust.deliveredItems
-                      .filter(item => item.productId === product.productId)
-                      .reduce((subSum, item) => subSum + item.qty, 0),
+                  (sum, cust) => {
+                    // Only count unconfirmed deliveries. Confirmed deliveries are accounted for
+                    // in the backend's availableQuantity after refetch.
+                    if (cust.deliveryConfirmed) return sum;
+                    return sum +
+                      cust.deliveredItems
+                        .filter(item => item.productId === product.productId)
+                        .reduce((subSum, item) => subSum + item.qty, 0);
+                  },
                   0
                 );
-                const availableQty = (inventoryItem.totalPickedQuantity || 0) - totalDelivered;
+
+                // Use availableQuantity (Net) if present, fallback to TotalPicked (Gross)
+                const baseQty = inventoryItem.availableQuantity ?? inventoryItem.totalPickedQuantity ?? 0;
+                const availableQty = baseQty - totalDelivered;
 
                 const associatedQty = customerProductRelations.find(
                   rel => rel.customerId === customer.customerId &&
@@ -1298,13 +1344,18 @@ const styles = StyleSheet.create({
   headerTopBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     backgroundColor: '#fff',
     zIndex: 1100,
   },
   hamburgerButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+  },
+  syncButton: {
     padding: 8,
     borderRadius: 8,
     backgroundColor: '#F1F5F9',
