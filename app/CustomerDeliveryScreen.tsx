@@ -71,6 +71,7 @@ export default function CustomerDeliveryScreen() {
   const [productDeliveryModal, setProductDeliveryModal] = useState(false) // For modal visibility
   const [menuVisible, setMenuVisible] = useState(false) // For hamburger menu
   const [paymentAmount, setPaymentAmount] = useState('') // For B2B payment input
+  const [currentWorkerName, setCurrentWorkerName] = useState('') // Local worker name storage
 
   // Refs for tabs
   const tabListRef = useRef<FlatList>(null);
@@ -111,6 +112,14 @@ export default function CustomerDeliveryScreen() {
       setSelectedIdx(0);
     }
   }, [customers]);
+
+  useEffect(() => {
+    const getWorkerName = async () => {
+      const name = await AsyncStorage.getItem('workerName');
+      if (name) setCurrentWorkerName(name);
+    };
+    getWorkerName();
+  }, []);
 
   const handleTabPress = (index: number) => {
     setSelectedIdx(index);
@@ -556,6 +565,14 @@ export default function CustomerDeliveryScreen() {
                   setMenuVisible(false);
                   if (item === 'Logout') {
                     handleLogout();
+                  } else if (['Add', 'Transfer', 'Purchase'].includes(item)) {
+                    router.push({
+                      pathname: '/InventoryManagementScreen',
+                      params: {
+                        customerName: customer?.name || '',
+                        workerName: currentWorkerName
+                      }
+                    });
                   }
                 }}
               >
