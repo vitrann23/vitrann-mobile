@@ -127,44 +127,79 @@ export default function CustomerDeliveryScreen() {
     }
 
     setProcessingDelivery(true);
+    let allSuccessful = true;
+    let anySuccessful = false;
 
     try {
-      const payload = {
-        workerId: parseInt(workerIdParam as string),
-        customerId: customer.customerId,
-        deliveredItems: customer.deliveredItems.map(item => ({
-          productId: item.productId,
-          quantity: item.qty,
-          price: item.price,
-          originalPrice: item.originalPrice, // Send original for verification
-          isEdited: item.isEdited
-        })),
-        paymentReceived: calculateTotalPayment(customer.deliveredItems),
-        latitude: null, // Could add location later
-        longitude: null,
-        timestamp: new Date().toISOString()
-      };
+      const totalAmount = calculateTotalPayment(customer.deliveredItems);
 
-      // Add to offline queue/sync
-      await addToOfflineQueue('delivery', payload, `del_${customer.customerId}_${Date.now()}`);
+      for (const item of customer.deliveredItems) {
+        // Find corresponding inventoryId from worker's inventory
+        const inventoryItem = (inventory || []).find(inv => inv.inventory?.product?.productId === item.productId);
 
-      // Optimistic update
+        if (!inventoryItem) {
+          console.error(`Inventory ID not found for product ${item.productId}`);
+          allSuccessful = false;
+          continue;
+        }
+
+        const itemPayload = {
+          customerId: customer.customerId,
+          inventoryId: inventoryItem.inventoryId,
+          deliveredQuantity: item.qty,
+          billAmount: item.qty * item.price,
+          isPriceCustomized: item.isEdited
+        };
+
+        try {
+          // Always try direct API call first
+          const response = await apiClient.post('/deliveries/process', itemPayload) as any;
+
+          if (response.success) {
+            anySuccessful = true;
+          } else {
+            throw new Error(response.message || 'Server rejected delivery');
+          }
+        } catch (error) {
+          console.log(`Online submission failed for item ${item.productId}, falling back to offline queue:`, error);
+
+          // Fallback: Add individual item to offline queue
+          await addToOfflineQueue('delivery', itemPayload, `del_${customer.customerId}_${item.productId}_${Date.now()}`);
+          allSuccessful = false;
+        }
+      }
+
+      if (allSuccessful) {
+        Toast.show({
+          type: 'success',
+          text1: 'Delivery Confirmed',
+          text2: 'All items submitted successfully (Online)',
+        });
+      } else if (anySuccessful) {
+        Toast.show({
+          type: 'info',
+          text1: 'Partial Success',
+          text2: 'Some items saved offline for later sync',
+        });
+      } else {
+        Toast.show({
+          type: 'info',
+          text1: 'Saved Offline',
+          text2: 'Network unavailable, delivery queued for sync',
+        });
+      }
+
+      // Mark as confirmed locally regardless (Optimistic UI)
       const updatedCustomers = [...customers];
       updatedCustomers[selectedIdx] = {
         ...updatedCustomers[selectedIdx],
         deliveryConfirmed: true,
-        paymentReceived: payload.paymentReceived
+        paymentReceived: totalAmount
       };
       setCustomers(updatedCustomers);
 
       // Persist optimistic update to cache
       AsyncStorage.setItem('offline_customers', JSON.stringify(updatedCustomers));
-
-      Toast.show({
-        type: 'success',
-        text1: 'Delivery Confirmed',
-        text2: 'Delivery saved successfully',
-      });
 
     } catch (error) {
       console.error('Error confirming delivery:', error);
@@ -428,7 +463,7 @@ export default function CustomerDeliveryScreen() {
       {offlineQueueCount > 0 && (
         <View style={styles.syncBanner}>
           <Text style={styles.syncBannerText}>
-            ⚠️ {offlineQueueCount} items waiting to sync offline
+            ⚠️ {offlineQueueCount} items waiting to sync
           </Text>
           <TouchableOpacity
             style={styles.syncButton}

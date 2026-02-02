@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { OfflineQueueService } from '../services/OfflineQueueService';
 import NetInfo from '@react-native-community/netinfo';
 import Toast from 'react-native-toast-message';
+import { Platform } from 'react-native';
 
 export const useOfflineQueue = () => {
     const [queueSize, setQueueSize] = useState(0);
@@ -11,7 +12,7 @@ export const useOfflineQueue = () => {
     // Monitor network status
     useEffect(() => {
         const unsubscribe = NetInfo.addEventListener(state => {
-            const online = !!state.isConnected && !!state.isInternetReachable;
+            const online = !!state.isConnected && (Platform.OS === 'web' || !!state.isInternetReachable);
             setIsOnline(online);
 
             // Auto-sync when online
