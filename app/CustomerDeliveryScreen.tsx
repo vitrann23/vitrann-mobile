@@ -570,7 +570,8 @@ export default function CustomerDeliveryScreen() {
                       pathname: '/InventoryManagementScreen',
                       params: {
                         customerName: customer?.name || '',
-                        workerName: currentWorkerName
+                        workerName: currentWorkerName,
+                        initialTab: item.toUpperCase() // Pass TAB: ADD, TRANSFER, PURCHASE
                       }
                     });
                   }

@@ -34,27 +34,26 @@ interface Product {
     };
 }
 
-// Mock Workers (Keep for now as no worker API provided)
-
-const MOCK_WORKERS = [
-    { id: 1, name: 'Sandeep' },
-    { id: 2, name: 'Ravi' },
-    { id: 3, name: 'Amit' },
-    { id: 4, name: 'Deepak' },
-];
+interface Worker {
+    workerId: number;
+    firstName: string;
+    lastName: string | null;
+}
 
 type TabType = 'ADD' | 'TRANSFER' | 'PURCHASE';
 
 export default function InventoryManagementScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const { customerName, workerName: currentWorkerName } = useLocalSearchParams();
+    const { customerName, workerName: currentWorkerName, initialTab } = useLocalSearchParams();
 
     const [products, setProducts] = useState<Product[]>([]);
+    const [workers, setWorkers] = useState<Worker[]>([]);
     const [loading, setLoading] = useState(true);
     const { data: inventoryData } = useInventory();
 
-    const [activeTab, setActiveTab] = useState<TabType>('ADD');
+    // Initialize with passed tab or default to ADD
+    const [activeTab, setActiveTab] = useState<TabType>((initialTab as TabType) || 'ADD');
     const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null);
     const [quantities, setQuantities] = useState<Record<number, string>>({});
     const [manualAmount, setManualAmount] = useState('');
@@ -80,7 +79,24 @@ export default function InventoryManagementScreen() {
             }
         };
 
+        const fetchWorkers = async () => {
+            try {
+                const response = await apiClient.get('/workers/list/public') as any;
+                // Handle different response structures
+                if (Array.isArray(response)) {
+                    setWorkers(response);
+                } else if (response.data && Array.isArray(response.data)) {
+                    setWorkers(response.data);
+                } else {
+                    console.log('Unexpected worker response:', response);
+                }
+            } catch (error) {
+                console.error('Error fetching workers:', error);
+            }
+        };
+
         fetchProducts();
+        fetchWorkers();
     }, []);
 
     const filteredProducts = useMemo(() => {
@@ -205,7 +221,7 @@ export default function InventoryManagementScreen() {
                                         activeTab !== 'TRANSFER' && { color: '#6B7280' }
                                     ]}>
                                         {activeTab === 'TRANSFER'
-                                            ? (selectedWorkerId ? MOCK_WORKERS.find(w => w.id === selectedWorkerId)?.name : 'Select Worker')
+                                            ? (selectedWorkerId ? workers.find(w => w.workerId === selectedWorkerId)?.firstName : 'Select Worker')
                                             : (currentWorkerName || 'My Stock')
                                         }
                                     </Text>
@@ -217,16 +233,16 @@ export default function InventoryManagementScreen() {
 
                             {activeTab === 'TRANSFER' && showWorkerDropdown && (
                                 <View style={styles.dropdownContent}>
-                                    {MOCK_WORKERS.map(worker => (
+                                    {workers.map(worker => (
                                         <TouchableOpacity
-                                            key={worker.id}
+                                            key={worker.workerId}
                                             style={styles.dropdownItem}
                                             onPress={() => {
-                                                setSelectedWorkerId(worker.id);
+                                                setSelectedWorkerId(worker.workerId);
                                                 setShowWorkerDropdown(false);
                                             }}
                                         >
-                                            <Text style={styles.dropdownItemText}>{worker.name}</Text>
+                                            <Text style={styles.dropdownItemText}>{worker.firstName} {worker.lastName}</Text>
                                         </TouchableOpacity>
                                     ))}
                                 </View>
