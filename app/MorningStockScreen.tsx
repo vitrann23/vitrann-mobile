@@ -172,41 +172,49 @@ const MorningStockScreen = () => {
               <Text style={styles.emptyText}>No products available</Text>
             </View>
           ) : (
-            products.map((product) => (
-              <View key={product.inventory.inventoryId} style={styles.card}>
-                <View style={styles.imageWrapper}>
-                  {product.imageUrl ? (
-                    <Image source={{ uri: product.imageUrl }} style={styles.productImage} resizeMode="contain" />
-                  ) : (
-                    <View style={[styles.productImage, styles.placeholderImage]}>
-                      <Ionicons name="image-outline" size={24} color="#ccc" />
-                    </View>
-                  )}
-                </View>
+            <View style={styles.productsContainer}>
+              {products.map((product, index) => (
+                <View
+                  key={product.inventory.inventoryId}
+                  style={[
+                    styles.productRow,
+                    index === products.length - 1 && styles.lastRow
+                  ]}
+                >
+                  <View style={styles.imageWrapper}>
+                    {product.imageUrl ? (
+                      <Image source={{ uri: product.imageUrl }} style={styles.productImage} resizeMode="contain" />
+                    ) : (
+                      <View style={[styles.productImage, styles.placeholderImage]}>
+                        <Ionicons name="image-outline" size={24} color="#ccc" />
+                      </View>
+                    )}
+                  </View>
 
-                <View style={styles.textWrapper}>
-                  <Text style={styles.productName}>{product.productName}</Text>
-                </View>
+                  <View style={styles.textWrapper}>
+                    <Text style={styles.productName}>{product.productName}</Text>
+                  </View>
 
-                <View style={styles.inputWrapper}>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      (focusedInput === product.inventory.inventoryId || (parseInt(quantities[product.inventory.inventoryId] || '0') > 0)) && styles.inputActive
-                    ]}
-                    placeholder="0"
-                    placeholderTextColor="#999"
-                    keyboardType="numeric"
-                    maxLength={3}
-                    value={quantities[product.inventory.inventoryId] ?? ''}
-                    onFocus={() => setFocusedInput(product.inventory.inventoryId)}
-                    onBlur={() => setFocusedInput(null)}
-                    onChangeText={(text) => handleInputChange(product.inventory.inventoryId, text)}
-                    editable={!submitting}
-                  />
+                  <View style={styles.inputWrapper}>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        (focusedInput === product.inventory.inventoryId || (parseInt(quantities[product.inventory.inventoryId] || '0') > 0)) && styles.inputActive
+                      ]}
+                      placeholder="0"
+                      placeholderTextColor="#999"
+                      keyboardType="numeric"
+                      maxLength={3}
+                      value={quantities[product.inventory.inventoryId] ?? ''}
+                      onFocus={() => setFocusedInput(product.inventory.inventoryId)}
+                      onBlur={() => setFocusedInput(null)}
+                      onChangeText={(text) => handleInputChange(product.inventory.inventoryId, text)}
+                      editable={!submitting}
+                    />
+                  </View>
                 </View>
-              </View>
-            ))
+              ))}
+            </View>
           )}
         </ScrollView>
 
@@ -242,38 +250,38 @@ const styles = StyleSheet.create({
   headerContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    paddingTop: 20,
+    paddingBottom: 20,
     backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 3,
-    zIndex: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   headerTextContainer: {
     alignItems: 'center',
   },
   workerNameText: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 28,
+    fontWeight: '800', // Extra bold
     color: '#3880FF',
     marginBottom: 4,
+    letterSpacing: 0.5,
   },
   headerTitleText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 2,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000000', // Black
+    marginBottom: 6,
   },
   dateText: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3880FF', // Blue date
   },
 
   // List Styles
   scroll: {
     flex: 1,
+    backgroundColor: '#F8F9FA',
   },
   scrollContent: {
     paddingHorizontal: 16,
@@ -281,22 +289,27 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
-  card: {
+  productsContainer: {
+    borderWidth: 2,
+    borderColor: '#3880FF',
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  productRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 6,
-    marginBottom: 4,
     paddingVertical: 12,
-    paddingHorizontal: 12,
-    height: 80,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
-    elevation: 2,
-    borderWidth: 0.5,
-    borderColor: '#E0E0E0',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    height: 90,
+    backgroundColor: '#FFFFFF',
+  },
+  lastRow: {
+    borderBottomWidth: 0,
   },
 
   imageWrapper: {
@@ -304,17 +317,17 @@ const styles = StyleSheet.create({
     height: 60,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
   productImage: {
-    width: 50,
-    height: 50,
+    width: 60,
+    height: 60,
   },
   placeholderImage: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 4,
-    width: 50,
-    height: 50,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    width: 60,
+    height: 60,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -322,59 +335,74 @@ const styles = StyleSheet.create({
   textWrapper: {
     flex: 1,
     justifyContent: 'center',
+    paddingRight: 8,
   },
   productName: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#000',
+    color: '#1E293B',
+    letterSpacing: 0.3,
   },
 
   inputWrapper: {
     justifyContent: 'center',
   },
   input: {
-    width: 90,
-    height: 42,
+    width: 80,
+    height: 48,
     borderWidth: 1,
-    borderColor: '#CAC4D0',
-    borderRadius: 6,
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
     textAlign: 'center',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
-    color: '#1E293B',
+    color: '#0F172A',
     backgroundColor: '#FFFFFF',
   },
   inputActive: {
     borderColor: '#3880FF',
-    backgroundColor: '#F5F9FF',
-    borderWidth: 1.5,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 2,
+    color: '#3880FF',
   },
   footer: {
     backgroundColor: '#FFFFFF',
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
+    paddingBottom: Platform.OS === 'ios' ? 16 : 16,
   },
   button: {
     backgroundColor: '#3880FF',
-    paddingVertical: 14,
-    borderRadius: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: 'center',
+    shadowColor: "#3880FF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonDisabled: {
     backgroundColor: '#94A3B8',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700'
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   emptyContainer: {
     padding: 40,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyText: {
-    color: '#888',
+    fontSize: 16,
+    color: '#64748B',
+    marginTop: 12,
   }
 })
 
