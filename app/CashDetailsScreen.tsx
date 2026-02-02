@@ -15,25 +15,24 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  StatusBar,
 } from "react-native"
+import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import Toast from 'react-native-toast-message'
 import apiClient from '../services/apiClient'
 
 const notes = [
-  { label: "₹500", value: 500, color: "#87CEEB" },
-  { label: "₹200", value: 200, color: "#87CEEB" },
-  { label: "₹100", value: 100, color: "#87CEEB" },
-  { label: "₹50", value: 50, color: "#87CEEB" },
-  { label: "₹20", value: 20, color: "#87CEEB" },
-  { label: "₹10", value: 10, color: "#87CEEB" },
+  { label: "500", value: 500 },
+  { label: "200", value: 200 },
+  { label: "100", value: 100 },
+  { label: "50", value: 50 },
+  { label: "20", value: 20 },
+  { label: "10", value: 10 },
 ]
 
 const coins = [
-  { label: "₹10 (Coin)", value: 10, color: "#87CEEB" },
-  { label: "₹5", value: 5, color: "#87CEEB" },
-  { label: "₹2", value: 2, color: "#87CEEB" },
-  { label: "₹1", value: 1, color: "#87CEEB" },
+  { label: "Coin", value: 1 }
 ]
 
 
@@ -155,79 +154,78 @@ export default function CashDetailsScreen() {
     }
   }
 
-  const renderCard = (item: { label: string; value: number; color: string }, type: "note" | "coin") => (
-    <View key={item.label} style={[styles.card, { backgroundColor: item.color }]}>
-      <Text style={styles.label}>{item.label}</Text>
-      <TextInput
-        style={styles.input}
-        keyboardType="numeric"
-        maxLength={3}
-        value={type === "note" ? (noteCounts[item.label] ?? "") : (coinCounts[item.label] ?? "")}
-        placeholder="0"
-        placeholderTextColor="#999"
-        onChangeText={(val) => onChangeCount(type, item.label, val)}
-        editable={!submitting} // Disable during submission
-      />
+  const renderCard = (item: { label: string; value: number }, type: "note" | "coin") => (
+    <View key={item.label} style={styles.card}>
+      <View style={styles.labelContainer}>
+        <Text style={styles.currencySymbol}>₹</Text>
+        <Text style={styles.label}>{item.label}</Text>
+      </View>
+      <View style={styles.inputWrapper}>
+        <TextInput
+          style={styles.input}
+          keyboardType="numeric"
+          maxLength={3}
+          value={type === "note" ? (noteCounts[item.label] ?? "") : (coinCounts[item.label] ?? "")}
+          placeholder="0"
+          placeholderTextColor="#999"
+          onChangeText={(val) => onChangeCount(type, item.label, val)}
+          editable={!submitting}
+        />
+      </View>
     </View>
   )
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+      {/* Standardized Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Cash Details</Text>
+      </View>
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.titleContainer}>
-            <Text style={styles.title}>Enter Cash Details</Text>
-            <View style={styles.titleUnderline} />
+          <View style={styles.introContainer}>
+            <Text style={styles.introTitle}>Enter Cash Details</Text>
           </View>
 
-          <View style={styles.sectionHeader}>
-            <Image source={require("../assets/images/Notes.png")} style={styles.sectionIcon} />
-            <Text style={styles.sectionTitle}>Notes</Text>
-          </View>
-          {notes.map((note) => renderCard(note, "note"))}
+          <View style={styles.mainCard}>
+            {notes.map((note) => renderCard(note, "note"))}
+            {coins.map((coin) => renderCard(coin, "coin"))}
 
-          <View style={styles.sectionHeader}>
-            <Image source={require("../assets/images/Coins.png")} style={styles.sectionIcon} />
-            <Text style={styles.sectionTitle}>Coins</Text>
-          </View>
-          {coins.map((coin) => renderCard(coin, "coin"))}
-
-          <View style={[styles.totalContainer, totalAmount > 0 && styles.totalContainerActive]}>
-            <Text style={styles.totalLabel}>Total Entered</Text>
-            <Text style={[styles.totalAmount, totalAmount > 0 && styles.totalAmountActive]}>
-              ₹{totalAmount}
-            </Text>
-            {totalAmount > 0 && (
-              <Text style={styles.totalSubtext}>This amount will be submitted</Text>
-            )}
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabelText}>Total</Text>
+              <View style={styles.totalValueBox}>
+                <Text style={styles.totalValueText}>
+                  {totalAmount.toLocaleString('en-IN')}
+                </Text>
+              </View>
+            </View>
           </View>
 
           <TouchableOpacity
             style={[
               styles.nextButton,
               submitting && styles.nextButtonDisabled,
-              totalAmount <= 0 && styles.nextButtonInactive
             ]}
             onPress={onNext}
             activeOpacity={0.85}
             disabled={submitting || totalAmount <= 0}
           >
             {submitting ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator color="#ffffff" size="small" />
-                <Text style={styles.nextButtonText}>Submitting...</Text>
-              </View>
+              <ActivityIndicator color="#ffffff" size="small" />
             ) : (
-              <Text style={styles.nextButtonText}>
-                {totalAmount > 0 ? `Submit ₹${totalAmount}` : 'Enter Amount First'}
-              </Text>
+              <Text style={styles.nextButtonText}>Enter</Text>
             )}
           </TouchableOpacity>
         </ScrollView>
@@ -237,161 +235,146 @@ export default function CashDetailsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
-  content: { padding: 20 },
-  titleContainer: {
-    alignItems: "center",
-    marginBottom: 32,
+  container: {
+    flex: 1,
+    backgroundColor: "#F7F7F7"
   },
-  title: {
-    fontSize: 30,
-    fontWeight: "700",
-    color: "#1A365D",
-    textAlign: "center",
-    letterSpacing: -0.8,
-    textShadowColor: "rgba(30, 41, 59, 0.1)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-    marginBottom: 8,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
   },
-  titleUnderline: {
-    width: 60,
-    height: 4,
-    backgroundColor: "#1e40af",
-    borderRadius: 2,
-    shadowColor: "#1e40af",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 2,
+  backButton: {
+    marginRight: 16,
   },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 24,
-    marginBottom: 16,
-  },
-  sectionIcon: {
-    marginRight: 8,
-    width: 24,
-    height: 24,
-  },
-  sectionTitle: {
+  headerTitle: {
     fontSize: 20,
-    fontWeight: "700",
-    color: "#334155",
-    letterSpacing: -0.3,
+    fontWeight: '700',
+    color: '#333',
   },
+  content: {
+    paddingHorizontal: 17,
+    paddingTop: 10,
+  },
+  introContainer: {
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  introTitle: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#007AFF",
+    textAlign: "center",
+  },
+  mainCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    padding: 15,
+    paddingTop: 20,
+    marginTop: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+
   card: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderRadius: 16,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    marginBottom: 14,
-    backgroundColor: "#1E90FF",
-    shadowColor: "#0000FF",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: "#999", // Outline color from image
+    backgroundColor: "#fff",
+  },
+  labelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  currencySymbol: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#000",
+    marginRight: 10,
   },
   label: {
-    fontSize: 19,
+    fontSize: 24,
     fontWeight: "700",
-    color: "#1e293b",
-    letterSpacing: -0.2,
+    color: "#000",
+  },
+  inputWrapper: {
+    backgroundColor: "#D9E8FC", // Light blue background for input
+    borderRadius: 6,
+    width: 80,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   input: {
-    width: 80,
-    height: 48,
-    borderWidth: 2,
-    borderColor: "#cbd5e1",
-    borderRadius: 12,
+    width: '100%',
+    height: '100%',
     textAlign: "center",
     fontSize: 18,
     fontWeight: "700",
     color: "#1e293b",
-    backgroundColor: "#f8fafc",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
   },
-  totalContainer: {
-    marginTop: 32,
-    padding: 24,
-    backgroundColor: "#ffffff",
-    borderRadius: 20,
-    alignItems: "center",
-    shadowColor: "#1e40af",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 6,
+  totalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 25,
+    marginBottom: 10,
+    paddingHorizontal: 5,
+  },
+  totalLabelText: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#000',
+  },
+  totalValueBox: {
     borderWidth: 1,
-    borderColor: "#e0e7ff",
+    borderColor: '#000',
+    borderRadius: 5,
+    paddingHorizontal: 15,
+    height: 40,
+    minWidth: 140,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    backgroundColor: '#fff',
   },
-  totalContainerActive: {
-    backgroundColor: "#EFF6FF",
-    borderColor: "#1e40af",
-    borderWidth: 2,
-  },
-  totalLabel: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#475569",
-    letterSpacing: -0.1,
-  },
-  totalAmount: {
-    fontSize: 38,
-    fontWeight: "900",
-    color: "#1e40af",
-    marginTop: 6,
-    letterSpacing: -1,
-  },
-  totalAmountActive: {
-    color: "#059669",
-  },
-  totalSubtext: {
-    fontSize: 14,
-    color: "#64748B",
-    marginTop: 8,
-    fontStyle: "italic",
+  totalValueText: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#000',
   },
   nextButton: {
-    marginTop: 40,
-    borderRadius: 16,
-    paddingVertical: 18,
+    marginTop: 25,
+    height: 56,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#1e40af",
-    shadowColor: "#1e40af",
+    backgroundColor: "#3C81F6",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  nextButtonInactive: {
-    backgroundColor: "#94A3B8",
-    shadowColor: "#94A3B8",
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 4,
   },
   nextButtonDisabled: {
-    backgroundColor: "#F59E0B",
+    backgroundColor: "#94A3B8",
   },
   nextButtonText: {
     color: "#ffffff",
-    fontSize: 19,
+    fontSize: 24,
     fontWeight: "800",
-    letterSpacing: 0.2,
-  },
-  loadingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
   },
 })
