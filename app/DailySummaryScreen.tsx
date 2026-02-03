@@ -3,8 +3,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as SecureStore from 'expo-secure-store'
 import Constants from 'expo-constants'
-import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useEffect, useState } from 'react'
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
+import { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   ScrollView,
@@ -89,9 +89,12 @@ export default function DailySummaryScreen() {
   // Parse remaining quantities from params
   const remainingFromParams: ProductSummary = params.remaining ? JSON.parse(params.remaining as string) : {}
 
-  useEffect(() => {
-    fetchAllData()
-  }, [])
+  // Refresh data whenever screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchAllData()
+    }, [])
+  )
 
   const fetchAllData = async () => {
     try {
@@ -224,7 +227,16 @@ export default function DailySummaryScreen() {
   return (
     <SafeAreaView style={styles.pageBackground}>
       <ScrollView contentContainerStyle={styles.wrapper}>
-        <Text style={styles.heading}>📊 Daily Summary</Text>
+        <Text style={styles.heading}>Summary</Text>
+
+        <TouchableOpacity
+          style={styles.previewBtn}
+          onPress={() => {
+            router.push('/DetailedPreviewScreen')
+          }}
+        >
+          <Text style={styles.previewBtnText}>Preview</Text>
+        </TouchableOpacity>
 
         {/* Stock Details Table - 4 Columns */}
         <View style={styles.section}>
@@ -292,20 +304,6 @@ export default function DailySummaryScreen() {
           </View>
         </View>
 
-        {/* Submit Button */}
-        <TouchableOpacity
-          style={[styles.submitBtn, { backgroundColor: '#297BF6', marginBottom: 12 }]}
-          onPress={() => {
-            Toast.show({
-              type: 'info',
-              text1: 'Preview Mode',
-              text2: 'This screen is your final preview before submission.',
-              visibilityTime: 3000,
-            })
-          }}
-        >
-          <Text style={styles.submitBtnText}>🔍 Preview Summary</Text>
-        </TouchableOpacity>
 
         <TouchableOpacity
           style={[
@@ -321,7 +319,7 @@ export default function DailySummaryScreen() {
               <Text style={styles.submitBtnText}>Submitting...</Text>
             </View>
           ) : (
-            <Text style={styles.submitBtnText}>✅ Final Submit for Day</Text>
+            <Text style={styles.submitBtnText}>Submit Summary</Text>
           )}
         </TouchableOpacity>
 
@@ -390,11 +388,13 @@ const styles = StyleSheet.create({
   },
 
   heading: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#1D223B',
-    marginBottom: 20,
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#0C6CDE',
+    marginTop: 20,
+    marginBottom: 15,
     textAlign: 'center',
+    lineHeight: 47,
   },
 
   section: {
@@ -402,16 +402,16 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     marginBottom: 12,
-    paddingHorizontal: 4,
+    paddingHorizontal: 12,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1E293B',
-    letterSpacing: -0.5,
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#0C6CDE',
+    lineHeight: 31,
   },
   table: {
     backgroundColor: '#fff',
@@ -476,16 +476,14 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   submitBtn: {
-    backgroundColor: '#16A34A',
-    borderRadius: 14,
+    backgroundColor: '#17A34C',
+    borderRadius: 6.77,
     paddingVertical: 18,
     alignItems: 'center',
-    marginTop: 12,
-    elevation: 8,
-    shadowColor: '#16A34A',
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    marginTop: 20,
+    width: '100%',
+    height: 65,
+    justifyContent: 'center',
   },
   submitBtnDisabled: {
     backgroundColor: '#94A3B8',
@@ -494,7 +492,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '800',
     fontSize: 18,
-    letterSpacing: 0.5,
   },
   logoutBtn: {
     paddingVertical: 16,
@@ -507,5 +504,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 15,
     textDecorationLine: 'underline',
-  }
+  },
+  previewBtn: {
+    backgroundColor: '#0C6CDE',
+    borderRadius: 7.86,
+    width: 150,
+    height: 37,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12, // Offset to the left as requested
+    marginBottom: 15,
+  },
+  previewBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 16,
+  },
 })
