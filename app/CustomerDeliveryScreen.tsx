@@ -242,7 +242,7 @@ export default function CustomerDeliveryScreen() {
     }
   };
 
-  const handleAddProduct = (product: any, qty: number, price: number) => {
+  const handleAddProduct = (product: any, qty: number, price: number, isCustom: boolean = false) => {
     if (!customer) return;
 
     // Check duplication
@@ -256,8 +256,8 @@ export default function CustomerDeliveryScreen() {
       name: product.productName,
       qty,
       price: price,
-      originalPrice: product.currentProductPrice,
-      isEdited: price !== product.currentProductPrice
+      originalPrice: isCustom ? price / qty : product.currentProductPrice,
+      isEdited: isCustom || price !== (product.currentProductPrice * qty)
     };
 
     const updatedCustomers = [...customers];
@@ -338,7 +338,11 @@ export default function CustomerDeliveryScreen() {
       return;
     }
 
-    handleAddProduct(product, qtyToAdd, Number(product.currentProductPrice) * qtyToAdd);
+    const priceInfo = customer.associatedProductPrices?.[product.productId];
+    const effectivePrice = priceInfo ? priceInfo.price : Number(product.currentProductPrice);
+    const isCustom = priceInfo?.isCustom || false;
+
+    handleAddProduct(product, qtyToAdd, effectivePrice * qtyToAdd, isCustom);
   };
 
   const handleItemTotalChange = (itemIndex: number, newTotal: string) => {
@@ -470,13 +474,17 @@ export default function CustomerDeliveryScreen() {
 
         const isAlreadyIncluded = finalItemsToDeliver.some(item => item.productId === product.productId);
         if (!isAlreadyIncluded) {
+          const priceInfo = customer.associatedProductPrices?.[product.productId];
+          const effectivePrice = priceInfo ? priceInfo.price : Number(product.currentProductPrice);
+          const isCustom = priceInfo?.isCustom || false;
+
           finalItemsToDeliver.push({
             productId: product.productId,
             name: product.productName,
             qty: qty,
-            price: Number(product.currentProductPrice) * qty,
-            originalPrice: product.currentProductPrice,
-            isEdited: false
+            price: effectivePrice * qty,
+            originalPrice: effectivePrice,
+            isEdited: isCustom
           });
         }
       }
@@ -738,11 +746,18 @@ export default function CustomerDeliveryScreen() {
                       </View>
                       <View style={styles.listCardInfo}>
                         <Text style={styles.listCardName}>{product.productName}</Text>
-                        <Text style={[styles.listCardDetails, { color: '#3880FF' }]}>
-                          Available: {availableQty > 0 ? availableQty : 0}
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={[styles.listCardDetails, { color: '#3880FF' }]}>
+                            Available: {availableQty > 0 ? availableQty : 0}
+                          </Text>
+                          {customer.associatedProductPrices?.[product.productId]?.isCustom && (
+                            <View style={{ backgroundColor: '#EEF2FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 }}>
+                              <Text style={{ fontSize: 10, color: '#4F46E5', fontWeight: '600' }}>Custom Price</Text>
+                            </View>
+                          )}
+                        </View>
                         <Text style={styles.listCardPrice}>
-                          ₹ {Number(product.currentProductPrice)}/packet
+                          ₹ {customer.associatedProductPrices?.[product.productId]?.price || Number(product.currentProductPrice)}/packet
                         </Text>
                       </View>
                     </View>
@@ -893,7 +908,7 @@ export default function CustomerDeliveryScreen() {
         onClose={() => setProductDeliveryModal(false)}
       />
 
-      <View style={[styles.fixedButtonContainer, { bottom: insets.bottom + 10 }]}>
+      <View style={[styles.fixedButtonContainer, { bottom: (insets.bottom || 0) + 10 }]}>
         <TouchableOpacity
           style={[
             styles.confirmButton,
@@ -1536,7 +1551,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 18,
     right: 18,
-    zIndex: 100,
+    bottom: 20, // Default bottom for web/browser
+    zIndex: 1000, // Higher z-index to stay on top
   },
   confirmButton: {
     backgroundColor: '#3880FF',

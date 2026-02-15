@@ -72,6 +72,8 @@ export interface CustomerProductRelation {
     fromDate: string;
     thruDate: string | null;
     product: Product;
+    effectivePrice: number;
+    isCustomPrice: boolean;
 }
 
 export interface DeliveredItem {
@@ -94,6 +96,7 @@ export interface CustomerForDelivery {
     deliveryConfirmed: boolean;
     sequenceNumber: number;
     associatedProductIds?: number[];
+    associatedProductPrices?: Record<number, { price: number, isCustom: boolean }>;
 }
 
 export interface OfflineQueueItem {

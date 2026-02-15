@@ -11,10 +11,19 @@ export const transformCustomersForDelivery = (
     const activeRelations = relations.filter(rel => rel.thruDate === null && rel.productId !== null);
 
     return sortedCustomers.map((item) => {
-        const associatedProducts = activeRelations
-            .filter(rel => rel.customerId === item.customer.customerId)
-            .map(rel => rel.productId!)
-            .filter(id => id !== null);
+        const customerRelations = activeRelations.filter(rel => rel.customerId === item.customer.customerId);
+        
+        const associatedProductIds = customerRelations.map(rel => rel.productId!).filter(id => id !== null);
+        
+        const associatedProductPrices: Record<number, { price: number, isCustom: boolean }> = {};
+        customerRelations.forEach(rel => {
+            if (rel.productId) {
+                associatedProductPrices[rel.productId] = {
+                    price: rel.effectivePrice,
+                    isCustom: rel.isCustomPrice
+                };
+            }
+        });
 
         return {
             id: item.customer.customerId.toString(),
@@ -26,7 +35,8 @@ export const transformCustomersForDelivery = (
             customerId: item.customer.customerId,
             deliveryConfirmed: false,
             sequenceNumber: item.sequenceNumber,
-            associatedProductIds: associatedProducts
+            associatedProductIds,
+            associatedProductPrices
         };
     });
 };
