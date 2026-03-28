@@ -1,12 +1,17 @@
-"use client"
+"use client";
 
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import Constants from 'expo-constants'
-import { useLocalSearchParams, useRouter } from "expo-router"
-import { useEffect, useState, useRef, useMemo, useCallback } from "react"
-import { useQueryClient } from '@tanstack/react-query'
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useQueryClient } from "@tanstack/react-query";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -16,34 +21,30 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Dimensions,
-  Alert,
-  FlatList,
-  Image,
-  RefreshControl
-} from "react-native"
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
-import Toast from 'react-native-toast-message'
-import NetInfo from '@react-native-community/netinfo'
-import apiClient from '../services/apiClient'
-import { ProductDeliveryModal } from "./CDS/ProductDeliveryModal"
-import { Ionicons } from '@expo/vector-icons'
-import * as SecureStore from 'expo-secure-store'
+} from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import Toast from "react-native-toast-message";
+import apiClient from "../services/apiClient";
+import { getProductImageSource } from "../utils/productImages";
+import { ProductDeliveryModal } from "./CDS/ProductDeliveryModal";
 
 // New Hooks & Types
-import { useCustomerDelivery } from '../hooks/useCustomerDelivery'
-import { useOfflineQueue } from '../hooks/useOfflineQueue'
-import { CustomerForDelivery, DeliveredItem, CustomerProductRelation, WorkerInventory } from '../types'
-import { calculateTotalPayment, calculateTotalQuantity, hasEditedPrices } from '../utils/deliveryCalculations'
+import { useCustomerDelivery } from "../hooks/useCustomerDelivery";
+import { useOfflineQueue } from "../hooks/useOfflineQueue";
+import { DeliveredItem, WorkerInventory } from "../types";
+import { calculateTotalPayment } from "../utils/deliveryCalculations";
 
-const { width } = Dimensions.get('window')
+const { width } = Dimensions.get("window");
 const TAB_WIDTH = width / 3;
 
 export default function CustomerDeliveryScreen() {
-  const router = useRouter()
-  const { workerId: workerIdParam } = useLocalSearchParams()
-  const insets = useSafeAreaInsets()
-  const queryClient = useQueryClient()
+  const router = useRouter();
+  const { workerId: workerIdParam } = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
 
   // Use new hooks
   const {
@@ -54,44 +55,46 @@ export default function CustomerDeliveryScreen() {
     error: apiError,
     refetchData,
     refreshing,
-    setCustomers
-  } = useCustomerDelivery()
+    setCustomers,
+  } = useCustomerDelivery();
 
   const {
     queueSize: offlineQueueCount,
     isSyncing,
     addToQueue: addToOfflineQueue,
-    syncQueue: syncOfflineQueue
-  } = useOfflineQueue()
+    syncQueue: syncOfflineQueue,
+  } = useOfflineQueue();
 
   // Local state for UI
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedIdx, setSelectedIdx] = useState<number>(0)
-  const [modalVisible, setModalVisible] = useState(false)
-  const [processingDelivery, setProcessingDelivery] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedIdx, setSelectedIdx] = useState<number>(0);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [processingDelivery, setProcessingDelivery] = useState(false);
 
   // Additional UI state
-  const [associatedProductQuantities, setAssociatedProductQuantities] = useState<Record<string, string>>({})
-  const [productDeliveryModal, setProductDeliveryModal] = useState(false) // For modal visibility
-  const [menuVisible, setMenuVisible] = useState(false) // For hamburger menu
-  const [paymentAmount, setPaymentAmount] = useState('') // For B2B payment input
-  const [currentWorkerName, setCurrentWorkerName] = useState('') // Local worker name storage
+  const [associatedProductQuantities, setAssociatedProductQuantities] =
+    useState<Record<string, string>>({});
+  const [productDeliveryModal, setProductDeliveryModal] = useState(false); // For modal visibility
+  const [menuVisible, setMenuVisible] = useState(false); // For hamburger menu
+  const [paymentAmount, setPaymentAmount] = useState(""); // For B2B payment input
+  const [currentWorkerName, setCurrentWorkerName] = useState(""); // Local worker name storage
 
   // Refs for tabs
   const tabListRef = useRef<FlatList>(null);
-  const { width: screenWidth } = Dimensions.get('window');
+  const { width: screenWidth } = Dimensions.get("window");
 
   // Derived state
   const filteredCustomers = useMemo(() => {
     if (!searchQuery) return customers;
-    return customers.filter(c =>
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.id.includes(searchQuery)
+    return customers.filter(
+      (c) =>
+        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.id.includes(searchQuery),
     );
   }, [customers, searchQuery]);
 
-  const customer = filteredCustomers[selectedIdx]
-  const isB2B = customer?.type === 'B2B'
+  const customer = filteredCustomers[selectedIdx];
+  const isB2B = customer?.type === "B2B";
 
   // Scroll to tab when selected
   useEffect(() => {
@@ -102,7 +105,7 @@ export default function CustomerDeliveryScreen() {
         tabListRef.current?.scrollToIndex({
           index: selectedIdx,
           animated: true,
-          viewPosition: 0.5
+          viewPosition: 0.5,
         });
       }, 100);
     } catch (e) {
@@ -115,7 +118,7 @@ export default function CustomerDeliveryScreen() {
 
   useEffect(() => {
     if (customers.length > 0 && !hasInitialJumped.current) {
-      const firstPendingIdx = customers.findIndex(c => !c.deliveryConfirmed);
+      const firstPendingIdx = customers.findIndex((c) => !c.deliveryConfirmed);
       if (firstPendingIdx !== -1) {
         setSelectedIdx(firstPendingIdx);
       }
@@ -125,7 +128,7 @@ export default function CustomerDeliveryScreen() {
 
   useEffect(() => {
     const getWorkerName = async () => {
-      const name = await AsyncStorage.getItem('workerName');
+      const name = await AsyncStorage.getItem("workerName");
       if (name) setCurrentWorkerName(name);
     };
     getWorkerName();
@@ -137,16 +140,16 @@ export default function CustomerDeliveryScreen() {
 
   const handleLogout = async () => {
     try {
-      if (Platform.OS === 'web') {
-        await AsyncStorage.removeItem('authToken');
-        await AsyncStorage.removeItem('workerId');
+      if (Platform.OS === "web") {
+        await AsyncStorage.removeItem("authToken");
+        await AsyncStorage.removeItem("workerId");
       } else {
-        await SecureStore.deleteItemAsync('authToken');
-        await SecureStore.deleteItemAsync('workerId');
+        await SecureStore.deleteItemAsync("authToken");
+        await SecureStore.deleteItemAsync("workerId");
       }
-      router.replace('/');
+      router.replace("/");
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error("Logout error:", error);
     }
   };
 
@@ -154,8 +157,8 @@ export default function CustomerDeliveryScreen() {
     if (!customer || !inventory) return [];
 
     // Get inventory items that match the customer's associated products
-    const directAssociations = inventory.filter(inv =>
-      customer.associatedProductIds?.includes(inv.inventory.product.productId)
+    const directAssociations = inventory.filter((inv) =>
+      customer.associatedProductIds?.includes(inv.inventory.product.productId),
     );
 
     return directAssociations;
@@ -167,7 +170,10 @@ export default function CustomerDeliveryScreen() {
     const itemsToDeliver = forcedItems || customer.deliveredItems;
 
     if (itemsToDeliver.length === 0) {
-      Alert.alert('No Items', 'Please add at least one item to confirm delivery.');
+      Alert.alert(
+        "No Items",
+        "Please add at least one item to confirm delivery.",
+      );
       return;
     }
 
@@ -180,7 +186,9 @@ export default function CustomerDeliveryScreen() {
 
       for (const item of itemsToDeliver) {
         // Find corresponding inventoryId from worker's inventory
-        const inventoryItem = (inventory || []).find(inv => inv.inventory?.product?.productId === item.productId);
+        const inventoryItem = (inventory || []).find(
+          (inv) => inv.inventory?.product?.productId === item.productId,
+        );
 
         if (!inventoryItem) {
           console.error(`Inventory ID not found for product ${item.productId}`);
@@ -193,31 +201,53 @@ export default function CustomerDeliveryScreen() {
           inventoryId: inventoryItem.inventoryId,
           deliveredQuantity: item.qty,
           billAmount: item.qty * item.price,
-          isPriceCustomized: item.isEdited
+          isPriceCustomized: item.isEdited,
         };
 
         try {
           // Always try direct API call first
-          const response = await apiClient.post('/deliveries/process', itemPayload) as any;
+          const response = (await apiClient.post(
+            "/deliveries/process",
+            itemPayload,
+          )) as any;
 
           if (response.success) {
             anySuccessful = true;
           } else {
-            throw new Error(response.message || 'Server rejected delivery');
+            throw new Error(response.message || "Server rejected delivery");
           }
         } catch (error) {
-          console.log(`Online submission failed for item ${item.productId}, falling back to offline queue:`, error);
-          await addToOfflineQueue('delivery', itemPayload, `del_${customer.customerId}_${item.productId}_${Date.now()}`);
+          console.log(
+            `Online submission failed for item ${item.productId}, falling back to offline queue:`,
+            error,
+          );
+          await addToOfflineQueue(
+            "delivery",
+            itemPayload,
+            `del_${customer.customerId}_${item.productId}_${Date.now()}`,
+          );
           allSuccessful = false;
         }
       }
 
       if (allSuccessful) {
-        Toast.show({ type: 'success', text1: 'Delivery Confirmed', text2: 'All items submitted successfully' });
+        Toast.show({
+          type: "success",
+          text1: "Delivery Confirmed",
+          text2: "All items submitted successfully",
+        });
       } else if (anySuccessful) {
-        Toast.show({ type: 'info', text1: 'Partial Success', text2: 'Some items saved offline' });
+        Toast.show({
+          type: "info",
+          text1: "Partial Success",
+          text2: "Some items saved offline",
+        });
       } else {
-        Toast.show({ type: 'info', text1: 'Saved Offline', text2: 'Delivery queued for sync' });
+        Toast.show({
+          type: "info",
+          text1: "Saved Offline",
+          text2: "Delivery queued for sync",
+        });
       }
 
       // Mark as confirmed locally regardless (Optimistic UI)
@@ -226,28 +256,43 @@ export default function CustomerDeliveryScreen() {
         ...updatedCustomers[selectedIdx],
         deliveredItems: itemsToDeliver,
         deliveryConfirmed: true,
-        paymentReceived: totalAmount
+        paymentReceived: totalAmount,
       };
       setCustomers(updatedCustomers);
-      AsyncStorage.setItem('offline_customers', JSON.stringify(updatedCustomers));
+      AsyncStorage.setItem(
+        "offline_customers",
+        JSON.stringify(updatedCustomers),
+      );
 
       // Invalidate inventory cache to fetch latest availableQuantity
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
     } catch (error) {
-      console.error('Error confirming delivery:', error);
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to save delivery' });
+      console.error("Error confirming delivery:", error);
+      Toast.show({
+        type: "error",
+        text1: "Error",
+        text2: "Failed to save delivery",
+      });
     } finally {
       setProcessingDelivery(false);
     }
   };
 
-  const handleAddProduct = (product: any, qty: number, price: number, isCustom: boolean = false) => {
+  const handleAddProduct = (
+    product: any,
+    qty: number,
+    price: number,
+    isCustom: boolean = false,
+  ) => {
     if (!customer) return;
 
     // Check duplication
-    if (customer.deliveredItems.some(item => item.productId === product.productId)) {
-      Toast.show({ type: 'info', text1: 'Item already added' });
+    if (
+      customer.deliveredItems.some(
+        (item) => item.productId === product.productId,
+      )
+    ) {
+      Toast.show({ type: "info", text1: "Item already added" });
       return;
     }
 
@@ -257,13 +302,16 @@ export default function CustomerDeliveryScreen() {
       qty,
       price: price,
       originalPrice: isCustom ? price / qty : product.currentProductPrice,
-      isEdited: isCustom || price !== (product.currentProductPrice * qty)
+      isEdited: isCustom || price !== product.currentProductPrice * qty,
     };
 
     const updatedCustomers = [...customers];
     updatedCustomers[selectedIdx] = {
       ...updatedCustomers[selectedIdx],
-      deliveredItems: [...updatedCustomers[selectedIdx].deliveredItems, newItem]
+      deliveredItems: [
+        ...updatedCustomers[selectedIdx].deliveredItems,
+        newItem,
+      ],
     };
     setCustomers(updatedCustomers);
   };
@@ -274,44 +322,57 @@ export default function CustomerDeliveryScreen() {
     const updatedCustomers = [...customers];
     updatedCustomers[selectedIdx] = {
       ...updatedCustomers[selectedIdx],
-      deliveredItems: updatedCustomers[selectedIdx].deliveredItems.filter(item => item.productId !== productId)
+      deliveredItems: updatedCustomers[selectedIdx].deliveredItems.filter(
+        (item) => item.productId !== productId,
+      ),
     };
     setCustomers(updatedCustomers);
   };
 
   const getDeliveryProgress = () => {
-    const completed = customers.filter(c => c.deliveryConfirmed).length;
+    const completed = customers.filter((c) => c.deliveryConfirmed).length;
     const total = customers.length;
     return { completed, total };
   };
-
 
   const getUnassociatedProducts = useCallback(() => {
     if (!customer || !inventory) return [];
 
     // If no associations, return all available inventory
-    if (!customer.associatedProductIds || customer.associatedProductIds.length === 0) {
-      return inventory.filter(item => (item.totalPickedQuantity || 0) > 0);
+    if (
+      !customer.associatedProductIds ||
+      customer.associatedProductIds.length === 0
+    ) {
+      return inventory.filter((item) => (item.totalPickedQuantity || 0) > 0);
     }
 
     // Otherwise filter out associated products
-    return inventory.filter(item => {
+    return inventory.filter((item) => {
       const productId = item.inventory?.product.productId;
-      return productId &&
+      return (
+        productId &&
         !customer.associatedProductIds?.includes(productId) &&
-        (item.totalPickedQuantity || 0) > 0;
+        (item.totalPickedQuantity || 0) > 0
+      );
     });
   }, [customer, inventory]);
 
   const hasUnassociatedProducts = () => getUnassociatedProducts().length > 0;
 
-  const handleAddAssociatedProduct = (inventoryItem: WorkerInventory, quantity?: number) => {
+  const handleAddAssociatedProduct = (
+    inventoryItem: WorkerInventory,
+    quantity?: number,
+  ) => {
     if (!inventoryItem.inventory?.product || !customer) return;
     const product = inventoryItem.inventory.product;
 
     // Check duplication
-    if (customer.deliveredItems.some(item => item.productId === product.productId)) {
-      Toast.show({ type: 'info', text1: 'Item already added' });
+    if (
+      customer.deliveredItems.some(
+        (item) => item.productId === product.productId,
+      )
+    ) {
+      Toast.show({ type: "info", text1: "Item already added" });
       return;
     }
 
@@ -320,26 +381,39 @@ export default function CustomerDeliveryScreen() {
     // Calculate availability (subtracting what others took)
     const totalDeliveredByAll = customers.reduce((sum, cust) => {
       if (cust.id === customer.id) return sum; // exclude current
-      return sum + cust.deliveredItems
-        .filter(item => item.productId === product.productId)
-        .reduce((s, i) => s + i.qty, 0);
+      return (
+        sum +
+        cust.deliveredItems
+          .filter((item) => item.productId === product.productId)
+          .reduce((s, i) => s + i.qty, 0)
+      );
     }, 0);
 
     const availableForThisProduct = availableQty - totalDeliveredByAll;
 
     if (availableForThisProduct <= 0) {
-      Toast.show({ type: 'error', text1: 'Out of Stock', text2: `${product.productName} is out of stock` });
+      Toast.show({
+        type: "error",
+        text1: "Out of Stock",
+        text2: `${product.productName} is out of stock`,
+      });
       return;
     }
 
     const qtyToAdd = quantity || 1;
     if (qtyToAdd > availableForThisProduct) {
-      Toast.show({ type: 'error', text1: 'Not Enough Stock', text2: `Only ${availableForThisProduct} available` });
+      Toast.show({
+        type: "error",
+        text1: "Not Enough Stock",
+        text2: `Only ${availableForThisProduct} available`,
+      });
       return;
     }
 
     const priceInfo = customer.associatedProductPrices?.[product.productId];
-    const effectivePrice = priceInfo ? priceInfo.price : Number(product.currentProductPrice);
+    const effectivePrice = priceInfo
+      ? priceInfo.price
+      : Number(product.currentProductPrice);
     const isCustom = priceInfo?.isCustom || false;
 
     handleAddProduct(product, qtyToAdd, effectivePrice * qtyToAdd, isCustom);
@@ -354,12 +428,12 @@ export default function CustomerDeliveryScreen() {
     updatedItems[itemIndex] = {
       ...updatedItems[itemIndex],
       price: totalAmount,
-      isEdited: true
+      isEdited: true,
     };
 
     updatedCustomers[selectedIdx] = {
       ...updatedCustomers[selectedIdx],
-      deliveredItems: updatedItems
+      deliveredItems: updatedItems,
     };
     setCustomers(updatedCustomers);
   };
@@ -374,27 +448,45 @@ export default function CustomerDeliveryScreen() {
 
     if (!itemToUpdate) return;
 
-    const inventoryItem = inventory?.find(inv => inv.inventory?.product.productId === itemToUpdate.productId);
+    const inventoryItem = inventory?.find(
+      (inv) => inv.inventory?.product.productId === itemToUpdate.productId,
+    );
     // Use availableQuantity (Net) if present, fallback to TotalPicked (Gross)
-    const baseQty = inventoryItem?.availableQuantity ?? inventoryItem?.totalPickedQuantity ?? 0;
+    const baseQty =
+      inventoryItem?.availableQuantity ??
+      inventoryItem?.totalPickedQuantity ??
+      0;
 
     const totalDeliveredByAll = customers.reduce((sum, cust) => {
-      // Only count UNCONFIRMED deliveries in this subtraction. 
+      // Only count UNCONFIRMED deliveries in this subtraction.
       // Confirmed ones are already deducted from 'availableQuantity' by the backend.
       if (cust.deliveryConfirmed) return sum;
 
       if (cust.id === customer.id) {
-        return sum + cust.deliveredItems.filter(i => i.productId === itemToUpdate.productId && i !== itemToUpdate).reduce((s, i) => s + i.qty, 0);
+        return (
+          sum +
+          cust.deliveredItems
+            .filter(
+              (i) =>
+                i.productId === itemToUpdate.productId && i !== itemToUpdate,
+            )
+            .reduce((s, i) => s + i.qty, 0)
+        );
       }
-      return sum + cust.deliveredItems.filter(i => i.productId === itemToUpdate.productId).reduce((s, i) => s + i.qty, 0);
+      return (
+        sum +
+        cust.deliveredItems
+          .filter((i) => i.productId === itemToUpdate.productId)
+          .reduce((s, i) => s + i.qty, 0)
+      );
     }, 0);
 
-    const maxAvailable = baseQty - totalDeliveredByAll;
+    const maxAvailable = Math.max(0, baseQty - totalDeliveredByAll);
 
-    if (newQuantity > maxAvailable) {
+    if (newQuantity > maxAvailable && newQuantity !== 0) {
       Toast.show({
-        type: 'error',
-        text1: 'Not Enough Stock',
+        type: "error",
+        text1: "Not Enough Stock",
         text2: `Only ${maxAvailable} available`,
       });
       return;
@@ -403,30 +495,37 @@ export default function CustomerDeliveryScreen() {
     updatedItems[itemIndex] = {
       ...itemToUpdate,
       qty: newQuantity,
-      price: itemToUpdate.isEdited ? itemToUpdate.price : itemToUpdate.originalPrice * newQuantity
+      price: itemToUpdate.isEdited
+        ? itemToUpdate.price
+        : itemToUpdate.originalPrice * newQuantity,
     };
 
-    updatedCustomers[selectedIdx] = { ...updatedCustomers[selectedIdx], deliveredItems: updatedItems };
+    updatedCustomers[selectedIdx] = {
+      ...updatedCustomers[selectedIdx],
+      deliveredItems: updatedItems,
+    };
     setCustomers(updatedCustomers);
   };
 
   const handleRemoveItem = (itemIndex: number) => {
     if (!customer) return;
     const updatedCustomers = [...customers];
-    const updatedItems = customer.deliveredItems.filter((_, idx) => idx !== itemIndex);
+    const updatedItems = customer.deliveredItems.filter(
+      (_, idx) => idx !== itemIndex,
+    );
 
     updatedCustomers[selectedIdx] = {
       ...updatedCustomers[selectedIdx],
-      deliveredItems: updatedItems
+      deliveredItems: updatedItems,
     };
     setCustomers(updatedCustomers);
-    Toast.show({ type: 'info', text1: 'Item Removed' });
+    Toast.show({ type: "info", text1: "Item Removed" });
   };
 
   const confirmDelivery = async () => {
     if (!customer) return;
 
-    // 1. Gather all items to deliver: 
+    // 1. Gather all items to deliver:
     const finalItemsToDeliver: DeliveredItem[] = [...customer.deliveredItems];
     const associatedProducts = getAssociatedProducts();
 
@@ -437,11 +536,13 @@ export default function CustomerDeliveryScreen() {
       const quantityKey = `${customer.customerId}-${product.productId}`;
       const enteredQty = associatedProductQuantities[quantityKey];
 
-      const associatedQty = customerProductRelations.find(
-        rel => rel.customerId === customer.customerId &&
-          rel.productId === product.productId &&
-          rel.thruDate === null
-      )?.quantityAssociated || 0;
+      const associatedQty =
+        customerProductRelations.find(
+          (rel) =>
+            rel.customerId === customer.customerId &&
+            rel.productId === product.productId &&
+            rel.thruDate === null,
+        )?.quantityAssociated || 0;
 
       let qty = 0;
       if (enteredQty !== undefined) {
@@ -454,28 +555,37 @@ export default function CustomerDeliveryScreen() {
         // Check availability precisely before including
         const totalDeliveredByAllPending = customers.reduce((sum, cust) => {
           if (cust.deliveryConfirmed) return sum;
-          return sum + cust.deliveredItems
-            .filter(item => item.productId === product.productId)
-            .reduce((s, i) => s + i.qty, 0);
+          return (
+            sum +
+            cust.deliveredItems
+              .filter((item) => item.productId === product.productId)
+              .reduce((s, i) => s + i.qty, 0)
+          );
         }, 0);
 
-        const baseQty = invItem.availableQuantity ?? invItem.totalPickedQuantity ?? 0;
+        const baseQty =
+          invItem.availableQuantity ?? invItem.totalPickedQuantity ?? 0;
         const availableNow = baseQty - totalDeliveredByAllPending;
 
         if (qty > availableNow) {
           Toast.show({
-            type: 'error',
-            text1: 'Insufficient Stock',
+            type: "error",
+            text1: "Insufficient Stock",
             text2: `${product.productName}: Needed ${qty}, Available ${availableNow}. Please Add or Purchase more stock.`,
-            visibilityTime: 4000
+            visibilityTime: 4000,
           });
           return; // Stop the whole confirmation
         }
 
-        const isAlreadyIncluded = finalItemsToDeliver.some(item => item.productId === product.productId);
+        const isAlreadyIncluded = finalItemsToDeliver.some(
+          (item) => item.productId === product.productId,
+        );
         if (!isAlreadyIncluded) {
-          const priceInfo = customer.associatedProductPrices?.[product.productId];
-          const effectivePrice = priceInfo ? priceInfo.price : Number(product.currentProductPrice);
+          const priceInfo =
+            customer.associatedProductPrices?.[product.productId];
+          const effectivePrice = priceInfo
+            ? priceInfo.price
+            : Number(product.currentProductPrice);
           const isCustom = priceInfo?.isCustom || false;
 
           finalItemsToDeliver.push({
@@ -484,7 +594,7 @@ export default function CustomerDeliveryScreen() {
             qty: qty,
             price: effectivePrice * qty,
             originalPrice: effectivePrice,
-            isEdited: isCustom
+            isEdited: isCustom,
           });
         }
       }
@@ -492,21 +602,25 @@ export default function CustomerDeliveryScreen() {
 
     if (finalItemsToDeliver.length === 0) {
       if (selectedIdx < customers.length - 1) {
-        Toast.show({ type: 'info', text1: 'Skipping' });
+        Toast.show({ type: "info", text1: "Skipping" });
         setSelectedIdx(selectedIdx + 1);
       } else {
         // Last customer - navigate to cash details anyway?
         router.push({
           pathname: "/CashDetailsScreen",
           params: {
-            deliveryData: JSON.stringify(customers.map(c => ({
-              customerId: c.customerId,
-              deliveredItems: c.deliveredItems,
-              paymentReceived: c.paymentReceived,
-              deliveryConfirmed: c.deliveryConfirmed
-            }))),
-            totalPayments: customers.reduce((sum, c) => sum + c.paymentReceived, 0).toString()
-          }
+            deliveryData: JSON.stringify(
+              customers.map((c) => ({
+                customerId: c.customerId,
+                deliveredItems: c.deliveredItems,
+                paymentReceived: c.paymentReceived,
+                deliveryConfirmed: c.deliveryConfirmed,
+              })),
+            ),
+            totalPayments: customers
+              .reduce((sum, c) => sum + c.paymentReceived, 0)
+              .toString(),
+          },
         });
       }
       return;
@@ -523,23 +637,26 @@ export default function CustomerDeliveryScreen() {
         ...currentCustomers[selectedIdx],
         deliveredItems: finalItemsToDeliver,
         deliveryConfirmed: true,
-        paymentReceived: totalAmount
+        paymentReceived: totalAmount,
       };
 
-      const deliveryData = currentCustomers.map(c => ({
+      const deliveryData = currentCustomers.map((c) => ({
         customerId: c.customerId,
         deliveredItems: c.deliveredItems,
         paymentReceived: c.paymentReceived,
-        deliveryConfirmed: c.deliveryConfirmed
+        deliveryConfirmed: c.deliveryConfirmed,
       }));
-      const totalPayments = currentCustomers.reduce((sum, c) => sum + c.paymentReceived, 0);
+      const totalPayments = currentCustomers.reduce(
+        (sum, c) => sum + c.paymentReceived,
+        0,
+      );
 
       router.push({
         pathname: "/CashDetailsScreen",
         params: {
           deliveryData: JSON.stringify(deliveryData),
-          totalPayments: totalPayments.toString()
-        }
+          totalPayments: totalPayments.toString(),
+        },
       });
     } else {
       setSelectedIdx(selectedIdx + 1);
@@ -548,7 +665,9 @@ export default function CustomerDeliveryScreen() {
 
   // Compatibility aliases for render
   const loading = isLoading;
-  const error = apiError ? (apiError as any).message || 'An error occurred' : null;
+  const error = apiError
+    ? (apiError as any).message || "An error occurred"
+    : null;
   const fetchDataFromAPI = refetchData;
 
   if (loading) {
@@ -559,7 +678,7 @@ export default function CustomerDeliveryScreen() {
           <Text style={styles.loadingText}>Loading delivery route...</Text>
         </View>
       </SafeAreaView>
-    )
+    );
   }
 
   if (error || customers.length === 0) {
@@ -567,64 +686,128 @@ export default function CustomerDeliveryScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>
-            {error || 'No customers assigned'}
+            {error || "No customers assigned"}
           </Text>
 
-          <TouchableOpacity style={styles.retryButton} onPress={fetchDataFromAPI}>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={fetchDataFromAPI}
+          >
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
-    )
+    );
   }
 
-  const progress = getDeliveryProgress()
-  const totalPayment = calculateTotalPayment(customer.deliveredItems)
+  const progress = getDeliveryProgress();
+
+  // Calculate total payment including both delivered items and associated products
+  const calculateTotalPaymentWithAssociated = () => {
+    let total = calculateTotalPayment(customer.deliveredItems);
+
+    // Add payment for associated products that have quantities entered
+    getAssociatedProducts().forEach((inventoryItem) => {
+      const product = inventoryItem.inventory?.product;
+      if (!product) return;
+
+      const quantityKey = `${customer.customerId}-${product.productId}`;
+      const enteredQty =
+        parseInt(associatedProductQuantities[quantityKey]) || 0;
+
+      if (enteredQty > 0) {
+        const price =
+          customer.associatedProductPrices?.[product.productId]?.price ||
+          Number(product.currentProductPrice);
+        total += price * enteredQty;
+      }
+    });
+
+    return total;
+  };
+
+  const totalPayment = calculateTotalPaymentWithAssociated();
+
+  const associatedProducts = getAssociatedProducts();
+  const allProducts = [
+    ...associatedProducts.map((inv) => ({
+      type: "associated",
+      inventoryItem: inv,
+      deliveredItem: null,
+    })),
+    ...customer.deliveredItems.map((item) => ({
+      type: "delivered",
+      inventoryItem: null,
+      deliveredItem: item,
+    })),
+  ];
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" />
 
       {/* Header Top Bar */}
       <View style={styles.headerTopBar}>
         <TouchableOpacity
+          style={styles.skipButton}
+          onPress={() => {
+            Toast.show({ type: "info", text1: "Skipping Delivery" });
+            if (selectedIdx < customers.length - 1) {
+              setSelectedIdx(selectedIdx + 1);
+            }
+          }}
+        >
+          <Text style={styles.skipButtonText}>Skip</Text>
+        </TouchableOpacity>
+        {/* <TouchableOpacity
           style={styles.syncButton}
           onPress={refetchData}
           disabled={refreshing}
         >
-          <Ionicons name="refresh" size={24} color={refreshing ? "#999" : "#3880FF"} />
-        </TouchableOpacity>
+          <Ionicons
+            name="refresh"
+            size={24}
+            color={refreshing ? "#999" : "#3880FF"}
+          />
+        </TouchableOpacity> */}
 
         <TouchableOpacity
           style={styles.hamburgerButton}
           onPress={() => setMenuVisible(!menuVisible)}
         >
-          <Ionicons name="menu" size={28} color="#3880FF" />
+          <Ionicons name="menu" size={30} color="#757575" />
         </TouchableOpacity>
 
         {menuVisible && (
           <View style={styles.menuOverlay}>
-            {['Add', 'Transfer', 'Purchase', 'Logout'].map((item) => (
+            {["Add", "Transfer", "Purchase", "Logout"].map((item) => (
               <TouchableOpacity
                 key={item}
                 style={styles.menuItem}
                 onPress={() => {
                   setMenuVisible(false);
-                  if (item === 'Logout') {
+                  if (item === "Logout") {
                     handleLogout();
-                  } else if (['Add', 'Transfer', 'Purchase'].includes(item)) {
+                  } else if (["Add", "Transfer", "Purchase"].includes(item)) {
                     router.push({
-                      pathname: '/InventoryManagementScreen',
+                      pathname: "/InventoryManagementScreen",
                       params: {
-                        customerName: customer?.name || '',
+                        customerName: customer?.name || "",
                         workerName: currentWorkerName,
-                        initialTab: item.toUpperCase() // Pass TAB: ADD, TRANSFER, PURCHASE
-                      }
+                        initialTab: item.toUpperCase(), // Pass TAB: ADD, TRANSFER, PURCHASE
+                      },
                     });
                   }
                 }}
               >
-                <Text style={[styles.menuItemText, item === 'Logout' && { color: '#EF4444' }]}>{item}</Text>
+                <Text
+                  style={[
+                    styles.menuItemText,
+                    item === "Logout" && { color: "#EF4444" },
+                  ]}
+                >
+                  {item}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -648,16 +831,23 @@ export default function CustomerDeliveryScreen() {
             <TouchableOpacity
               style={[
                 styles.tab,
-                selectedIdx === index && { backgroundColor: item.classification === 'B2B' ? '#10B981' : '#3880FF' },
-                item.deliveryConfirmed && styles.confirmedTab
+                selectedIdx === index && {
+                  backgroundColor:
+                    item.classification === "B2B" ? "#10B981" : "#3880FF",
+                },
+                item.deliveryConfirmed && styles.confirmedTab,
+                index > selectedIdx && { backgroundColor: "#CAC4D0" },
               ]}
               onPress={() => handleTabPress(index)}
             >
-              <Text style={[
-                styles.tabText,
-                selectedIdx === index && styles.activeTabText,
-                item.deliveryConfirmed && styles.confirmedTabText
-              ]}>
+              <Text
+                style={[
+                  styles.tabText,
+                  selectedIdx === index && styles.activeTabText,
+                  item.deliveryConfirmed && styles.confirmedTabText,
+                  index !== selectedIdx && { color: "#fff" },
+                ]}
+              >
                 {item.name}
               </Text>
             </TouchableOpacity>
@@ -671,21 +861,12 @@ export default function CustomerDeliveryScreen() {
       >
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={[styles.scrollViewContent, { paddingBottom: 100 }]}
+          contentContainerStyle={[
+            styles.scrollViewContent,
+            { paddingBottom: 100 },
+          ]}
           showsVerticalScrollIndicator={false}
         >
-          <TouchableOpacity
-            style={styles.skipButton}
-            onPress={() => {
-              Toast.show({ type: 'info', text1: 'Skipping Delivery' });
-              if (selectedIdx < customers.length - 1) {
-                setSelectedIdx(selectedIdx + 1);
-              }
-            }}
-          >
-            <Text style={styles.skipButtonText}>Skip</Text>
-          </TouchableOpacity>
-
           <View style={styles.customerCard}>
             {/* Centered Customer Header */}
             <View style={styles.centeredCustomerHeader}>
@@ -693,208 +874,309 @@ export default function CustomerDeliveryScreen() {
               <View style={styles.underLine} />
             </View>
 
-            <View style={{ marginTop: 10 }}>
-              {getAssociatedProducts().map((inventoryItem, idx) => {
-                const product = inventoryItem.inventory?.product;
-                if (!product) return null;
-
-                const isAlreadyAdded = customer.deliveredItems.some(
-                  item => item.productId === product.productId
-                );
-
-                const totalDelivered = customers.reduce(
-                  (sum, cust) => {
-                    // Only count unconfirmed deliveries. Confirmed deliveries are accounted for
-                    // in the backend's availableQuantity after refetch.
-                    if (cust.deliveryConfirmed) return sum;
-                    return sum +
-                      cust.deliveredItems
-                        .filter(item => item.productId === product.productId)
-                        .reduce((subSum, item) => subSum + item.qty, 0);
-                  },
-                  0
-                );
-
-                // Use availableQuantity (Net) if present, fallback to TotalPicked (Gross)
-                const baseQty = inventoryItem.availableQuantity ?? inventoryItem.totalPickedQuantity ?? 0;
-                const availableQty = baseQty - totalDelivered;
-
-                const associatedQty = customerProductRelations.find(
-                  rel => rel.customerId === customer.customerId &&
-                    rel.productId === product.productId &&
-                    rel.thruDate === null
-                )?.quantityAssociated || 0;
-
-                const quantityKey = `${customer.customerId}-${product.productId}`;
-                // B2C: Pre-fill with associated qty
-                // B2B: Empty
-                const defaultValue = isB2B ? '' : (associatedQty > 0 ? associatedQty.toString() : '');
-                const currentQuantity = associatedProductQuantities[quantityKey] ?? defaultValue;
-
-                return (
-                  <View
-                    key={`associated-${product.productId}`}
-                    style={styles.productItemCard}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                      <View style={{ width: 60, height: 60, backgroundColor: '#F8F9FA', borderRadius: 8, marginRight: 12, justifyContent: 'center', alignItems: 'center' }}>
-                        {product.imageUrl ? (
-                          <Image source={{ uri: product.imageUrl }} style={{ width: 50, height: 50 }} resizeMode="contain" />
-                        ) : (
-                          <Ionicons name="cube-outline" size={30} color="#CBD5E1" />
-                        )}
-                      </View>
-                      <View style={styles.listCardInfo}>
-                        <Text style={styles.listCardName}>{product.productName}</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <Text style={[styles.listCardDetails, { color: '#3880FF' }]}>
-                            Available: {availableQty > 0 ? availableQty : 0}
-                          </Text>
-                          {customer.associatedProductPrices?.[product.productId]?.isCustom && (
-                            <View style={{ backgroundColor: '#EEF2FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 }}>
-                              <Text style={{ fontSize: 10, color: '#4F46E5', fontWeight: '600' }}>Custom Price</Text>
-                            </View>
-                          )}
-                        </View>
-                        <Text style={styles.listCardPrice}>
-                          ₹ {customer.associatedProductPrices?.[product.productId]?.price || Number(product.currentProductPrice)}/packet
-                        </Text>
-                      </View>
-                    </View>
-
-                    {!customer.deliveryConfirmed && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <TextInput
-                          style={[
-                            styles.qtyInputBox,
-                          ]}
-                          value={currentQuantity}
-                          placeholder="0"
-                          onChangeText={(text) => {
-                            let numText = text.replace(/[^0-9]/g, '');
-                            setAssociatedProductQuantities(prev => ({
-                              ...prev,
-                              [quantityKey]: numText
-                            }));
-                          }}
-                          keyboardType="numeric"
-                          maxLength={3}
-                        />
-                      </View>
-                    )}
-
-                    {customer.deliveryConfirmed && isAlreadyAdded && (
-                      <View style={styles.listCardActions}>
-                        <Ionicons name="checkmark-circle" size={30} color="#10B981" />
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-
-            {/* Delivered Items Section (Only show if confirmed OR manually added via 'Other Product' modal) */}
-            {(customer.deliveryConfirmed || (customer.deliveredItems.length > 0 && !isB2B)) && (
-              <View style={{ padding: 16 }}>
-                <Text style={styles.sectionTitle}>
-                  {customer.deliveryConfirmed ? 'Delivered Summary' : 'Other Products Added'}
-                </Text>
-                <View style={styles.listContainer}>
-                  {customer.deliveredItems.map((item, idx) => (
-                    <View key={`delivered-${idx}`} style={[styles.listCard, styles.itemCard, { paddingVertical: 12 }]}>
-                      <View style={styles.listCardInfo}>
-                        <Text style={styles.listCardName}>{item.name}</Text>
-                        {/* Detailed item info row */}
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                          <TextInput
-                            style={[styles.priceInput, { width: 40, textAlign: 'center', height: 30, padding: 0 }]}
-                            value={item.qty.toString()}
-                            onChangeText={(newQty) => handleItemQuantityChange(idx, newQty)}
-                            keyboardType="numeric"
-                            editable={!customer.deliveryConfirmed}
-                          />
-                          <Text style={{ marginHorizontal: 4 }}>×</Text>
-                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Text>₹</Text>
-                            <TextInput
-                              style={[styles.priceInput, { width: 60, height: 30, padding: 0 }]}
-                              value={item.price.toString()}
-                              onChangeText={(newPrice) => handleItemTotalChange(idx, newPrice)}
-                              keyboardType="numeric"
-                              editable={!customer.deliveryConfirmed}
-                            />
-                          </View>
-                        </View>
-                      </View>
-                      {!customer.deliveryConfirmed && (
-                        <TouchableOpacity onPress={() => handleRemoveItem(idx)}>
-                          <Ionicons name="close-circle" size={24} color="#EF4444" />
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-
-
             {/* Other Product Button */}
             {!customer.deliveryConfirmed && (
               <TouchableOpacity
                 style={styles.otherProductButton}
                 onPress={() => setProductDeliveryModal(true)}
               >
-                <Text style={styles.otherProductButtonText}>
-                  Other Product
-                </Text>
+                <Text style={styles.otherProductButtonText}>Other Product</Text>
+                <View style={styles.iconCircle}>
+                  <Ionicons name="add" size={20} color="#757575" />
+                </View>
               </TouchableOpacity>
             )}
-          </View>
 
-          {/* Payment Section (B2B only) - Outside the card */}
-          {isB2B && !customer.deliveryConfirmed && (
-            <View style={[styles.paymentSection, { marginHorizontal: 13, marginTop: 10 }]}>
-              <View style={styles.paymentInputContainer}>
-                <Text style={{ fontSize: 20, color: '#333', marginRight: 4 }}>₹</Text>
-                <TextInput
-                  style={styles.paymentInput}
-                  value={paymentAmount || totalPayment.toString()}
-                  onChangeText={setPaymentAmount}
-                  keyboardType="numeric"
-                  placeholder="0.00"
-                  underlineColorAndroid="transparent"
-                />
-              </View>
-
-              <TouchableOpacity
-                style={styles.collectButton}
-                onPress={async () => {
-                  try {
-                    const amount = Number(paymentAmount) || totalPayment;
-                    const response = await apiClient.post('/deliveries/b2b-payment', {
-                      customerId: customer.customerId,
-                      amount: amount
-                    }) as any;
-
-                    if (response.id || response.customerId) {
-                      Toast.show({ type: 'success', text1: 'Payment Recorded', text2: `₹${amount} collected` });
-                      // Update local state to show it was confirmed? Or just toast.
-                      // Usually B2B collection is confirmed upon delivery confirm, 
-                      // but this specific button allows manual entry.
-                    } else {
-                      throw new Error('Failed to record payment');
-                    }
-                  } catch (err) {
-                    console.error('B2B Payment Error:', err);
-                    Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to record payment' });
-                  }
-                }}
+            {/* Products List - Morning Stock Style */}
+            <View style={styles.productsListWrapper}>
+              <ScrollView
+                contentContainerStyle={styles.productsListContainer}
+                showsVerticalScrollIndicator={false}
               >
-                <Text style={styles.collectButtonText}>Collect</Text>
-              </TouchableOpacity>
+                {allProducts.map((item, idx) => {
+                  const isAssociated = item.type === "associated";
+                  const inventoryItem = item.inventoryItem;
+                  const deliveredItem = item.deliveredItem;
+                  const product = isAssociated
+                    ? inventoryItem?.inventory?.product
+                    : inventory?.find(
+                        (inv) =>
+                          inv.inventory?.product.productId ===
+                          deliveredItem?.productId,
+                      )?.inventory?.product;
+                  if (!product) return null;
+                  const inventoryItemForProduct = inventory?.find(
+                    (inv) =>
+                      inv.inventory?.product.productId === product.productId,
+                  );
+                  const totalDeliveredByOthers = customers.reduce(
+                    (sum, cust) => {
+                      if (cust.deliveryConfirmed) return sum;
+                      if (cust.id === customer.id) return sum; // EXCLUDE current customer
+                      return (
+                        sum +
+                        cust.deliveredItems
+                          .filter((i) => i.productId === product.productId)
+                          .reduce((subSum, i) => subSum + i.qty, 0)
+                      );
+                    },
+                    0,
+                  );
+
+                  // For delivered items, exclude the current item being edited; for associated, don't subtract anything
+                  const currentCustomerDeliveredExcludingCurrent = isAssociated
+                    ? 0 // Associated products aren't in deliveredItems yet
+                    : customer.deliveredItems
+                        .filter(
+                          (i) =>
+                            i.productId === product.productId &&
+                            i !== deliveredItem, // Exclude the current item being edited
+                        )
+                        .reduce((sum, i) => sum + i.qty, 0);
+
+                  const baseQty =
+                    inventoryItemForProduct?.availableQuantity ??
+                    inventoryItemForProduct?.totalPickedQuantity ??
+                    0;
+                  const availableQty = Math.max(
+                    0,
+                    baseQty -
+                      totalDeliveredByOthers -
+                      currentCustomerDeliveredExcludingCurrent,
+                  );
+                  const associatedQty = isAssociated
+                    ? customerProductRelations.find(
+                        (rel) =>
+                          rel.customerId === customer.customerId &&
+                          rel.productId === product.productId &&
+                          rel.thruDate === null,
+                      )?.quantityAssociated || 0
+                    : 0;
+                  const quantityKey = `${customer.customerId}-${product.productId}`;
+                  const defaultValue = isB2B
+                    ? ""
+                    : associatedQty > 0
+                      ? associatedQty.toString()
+                      : "";
+                  const currentQuantity = isAssociated
+                    ? (associatedProductQuantities[quantityKey] ?? defaultValue)
+                    : deliveredItem?.qty.toString();
+                  const priceValue = isAssociated
+                    ? (
+                        customer.associatedProductPrices?.[product.productId]
+                          ?.price || Number(product.currentProductPrice)
+                      ).toString()
+                    : deliveredItem?.price.toString();
+                  const isAlreadyAdded = customer.deliveredItems.some(
+                    (d) => d.productId === product.productId,
+                  );
+                  const deliveredIndex = customer.deliveredItems.findIndex(
+                    (d) => d.productId === deliveredItem?.productId,
+                  );
+
+                  return (
+                    <View
+                      key={
+                        isAssociated
+                          ? `associated-${product.productId}`
+                          : `delivered-${deliveredItem?.productId}`
+                      }
+                      style={[
+                        styles.productRow,
+                        idx === allProducts.length - 1 && styles.lastRowStyle,
+                        parseInt(currentQuantity || "") === 0 && {
+                          opacity: 0.5,
+                        },
+                      ]}
+                    >
+                      {/* Image */}
+                      <View style={styles.imageWrapper}>
+                        {(() => {
+                          const productImageSource = getProductImageSource({
+                            productName: product.productName,
+                            imageUrl: product.imageUrl,
+                          });
+
+                          if (productImageSource) {
+                            return (
+                              <Image
+                                source={productImageSource}
+                                style={styles.productImage}
+                                resizeMode="contain"
+                              />
+                            );
+                          }
+
+                          return (
+                            <View
+                              style={[
+                                styles.productImage,
+                                {
+                                  justifyContent: "center",
+                                  alignItems: "center",
+                                },
+                              ]}
+                            >
+                              <Ionicons
+                                name="cube-outline"
+                                size={30}
+                                color="#CBD5E1"
+                              />
+                            </View>
+                          );
+                        })()}
+                      </View>
+
+                      {/* Text Info */}
+                      <View style={styles.textWrapper}>
+                        <Text>{product.productName}</Text>
+                        <Text>
+                          Available: {availableQty > 0 ? availableQty : 0}
+                        </Text>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            marginTop: 4,
+                          }}
+                        >
+                          <Text style={{ fontSize: 12, color: "#64748B" }}>
+                            ₹
+                          </Text>
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: "#64748B",
+                              marginLeft: 2,
+                            }}
+                          >
+                            {priceValue}/packet
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Quantity Input */}
+                      {!customer.deliveryConfirmed && (
+                        <View style={styles.inputWrapper}>
+                          <TextInput
+                            style={styles.input}
+                            value={currentQuantity}
+                            placeholder="0"
+                            placeholderTextColor="#999"
+                            onChangeText={(text) => {
+                              let numText = text.replace(/[^0-9]/g, "");
+                              // Limit based on available quantity for both associated and delivered products
+                              const maxQty = Math.max(0, availableQty);
+                              if (
+                                parseInt(numText) > maxQty &&
+                                numText !== ""
+                              ) {
+                                numText = maxQty.toString();
+                              }
+                              if (isAssociated) {
+                                setAssociatedProductQuantities((prev) => ({
+                                  ...prev,
+                                  [quantityKey]: numText,
+                                }));
+                              } else {
+                                // For delivered items - update the deliveredItems array
+                                if (deliveredIndex >= 0) {
+                                  handleItemQuantityChange(
+                                    deliveredIndex,
+                                    numText,
+                                  );
+                                }
+                              }
+                            }}
+                            keyboardType="numeric"
+                            maxLength={3}
+                            editable={!customer.deliveryConfirmed}
+                          />
+                        </View>
+                      )}
+
+                      {customer.deliveryConfirmed && isAlreadyAdded && (
+                        <View style={styles.checkmarkIcon}>
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={28}
+                            color="#10B981"
+                          />
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+              {/* Payment Section (B2B only) - Outside the card */}
+              {isB2B && !customer.deliveryConfirmed && (
+                <View
+                  style={[
+                    styles.paymentSection,
+                    { marginHorizontal: 13, marginTop: 10 },
+                  ]}
+                >
+                  <View style={styles.paymentInputContainer}>
+                    <Text
+                      style={{
+                        fontSize: 20,
+                        color: "#333",
+                        alignSelf: "center",
+                      }}
+                    >
+                      ₹
+                    </Text>
+                    <TextInput
+                      style={styles.paymentInput}
+                      value={paymentAmount || totalPayment.toString()}
+                      onChangeText={setPaymentAmount}
+                      keyboardType="numeric"
+                      placeholder="0.00"
+                      underlineColorAndroid="transparent"
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.collectButton}
+                    onPress={async () => {
+                      try {
+                        const amount = Number(paymentAmount) || totalPayment;
+                        const response = (await apiClient.post(
+                          "/deliveries/b2b-payment",
+                          {
+                            customerId: customer.customerId,
+                            amount: amount,
+                          },
+                        )) as any;
+
+                        if (response.id || response.customerId) {
+                          Toast.show({
+                            type: "success",
+                            text1: "Payment Recorded",
+                            text2: `₹${amount} collected`,
+                          });
+                          // Update local state to show it was confirmed? Or just toast.
+                          // Usually B2B collection is confirmed upon delivery confirm,
+                          // but this specific button allows manual entry.
+                        } else {
+                          throw new Error("Failed to record payment");
+                        }
+                      } catch (err) {
+                        console.error("B2B Payment Error:", err);
+                        Toast.show({
+                          type: "error",
+                          text1: "Error",
+                          text2: "Failed to record payment",
+                        });
+                      }
+                    }}
+                  >
+                    <Text style={styles.collectButtonText}>Collect</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
-          )}
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -908,21 +1190,23 @@ export default function CustomerDeliveryScreen() {
         onClose={() => setProductDeliveryModal(false)}
       />
 
-      <View style={[styles.fixedButtonContainer, { bottom: (insets.bottom || 0) + 10 }]}>
+      <View
+        style={[
+          styles.fixedButtonContainer,
+          { bottom: (insets.bottom || 0) + 10 },
+        ]}
+      >
         <TouchableOpacity
           style={[
             styles.confirmButton,
-            { backgroundColor: '#3880FF' },
-            processingDelivery && styles.confirmButtonProcessing
+            { backgroundColor: "#590194" },
+            processingDelivery && styles.confirmButtonProcessing,
           ]}
           onPress={confirmDelivery}
           disabled={processingDelivery}
         >
           <Text style={styles.confirmButtonText}>
-            {processingDelivery
-              ? 'Processing...'
-              : 'Confirm'
-            }
+            {processingDelivery ? "Processing..." : "Confirm"}
           </Text>
         </TouchableOpacity>
       </View>
@@ -930,46 +1214,45 @@ export default function CustomerDeliveryScreen() {
   );
 }
 
-
 const theme = {
   colors: {
-    primary: '#2563EB',
+    primary: "#2563EB",
 
-    primaryLight: '#EFF6FF',
-    primaryLighter: '#F0F9FF',
-    primaryDark: '#1E40AF',
-    primaryBorder: '#DBEAFE',
+    primaryLight: "#EFF6FF",
+    primaryLighter: "#F0F9FF",
+    primaryDark: "#1E40AF",
+    primaryBorder: "#DBEAFE",
 
-    success: '#10B981',
-    successLight: '#ECFDF5',
-    successDark: '#059669',
+    success: "#10B981",
+    successLight: "#ECFDF5",
+    successDark: "#059669",
 
-    warning: '#F59E0B',
+    warning: "#F59E0B",
 
-    error: '#EF4444',
-    errorLight: '#FEF2F2',
-    errorBorder: '#FCA5A5',
-    errorDark: '#DC2626',
+    error: "#EF4444",
+    errorLight: "#FEF2F2",
+    errorBorder: "#FCA5A5",
+    errorDark: "#DC2626",
 
-    background: '#F8F9FA',
-    surface: '#FFFFFF',
+    background: "#F8F9FA",
+    surface: "#FFFFFF",
 
-    textPrimary: '#1E293B',
-    textSecondary: '#64748B',
-    textOnPrimary: '#FFFFFF',
+    textPrimary: "#1E293B",
+    textSecondary: "#64748B",
+    textOnPrimary: "#FFFFFF",
 
-    border: '#E2E8F0',
-    borderLight: '#EEE',
+    border: "#E2E8F0",
+    borderLight: "#EEE",
 
-    inputBackground: '#FFFFFF',
-    inputBorder: '#3B82F6',
-    inputDisabled: '#9CA3AF',
-    inputDisabledBg: '#F3F4F6',
+    inputBackground: "#FFFFFF",
+    inputBorder: "#3B82F6",
+    inputDisabled: "#9CA3AF",
+    inputDisabledBg: "#F3F4F6",
 
-    tabInactive: '#F1F5F9',
-    tabInactiveText: '#333',
+    tabInactive: "#F1F5F9",
+    tabInactiveText: "#333",
 
-    disabled: '#D1D5DB',
+    disabled: "#D1D5DB",
   },
   font: {
     size: {
@@ -980,11 +1263,11 @@ const theme = {
       xs: 12,
     },
     weight: {
-      bold: '700',
-      semibold: '600',
-      medium: '500',
-      regular: '400',
-    }
+      bold: "700",
+      semibold: "600",
+      medium: "500",
+      regular: "400",
+    },
   },
   spacing: {
     xs: 4,
@@ -1003,16 +1286,16 @@ const theme = {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background
+    // backgroundColor: theme.colors.background,
   },
   keyboardAvoidingView: {
-    flex: 1
+    flex: 1,
   },
   scrollView: {
-    flex: 1
+    flex: 1,
   },
   scrollViewContent: {
-    paddingBottom: 120
+    paddingBottom: 120,
   },
   loadingContainer: {
     flex: 1,
@@ -1065,26 +1348,26 @@ const styles = StyleSheet.create({
 
   syncBanner: {
     backgroundColor: theme.colors.warning,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 8,
     paddingHorizontal: theme.spacing.md,
   },
   syncBannerText: {
-    color: '#fff',
-    fontWeight: 'bold',
+    color: "#fff",
+    fontWeight: "bold",
     fontSize: theme.font.size.xs,
   },
   syncButton: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 4,
   },
   syncButtonText: {
     color: theme.colors.warning,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     fontSize: theme.font.size.xs,
   },
   progressHeader: {
@@ -1114,7 +1397,7 @@ const styles = StyleSheet.create({
   },
 
   tabsContainer: {
-    backgroundColor: theme.colors.surface,
+    // backgroundColor: theme.colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.borderLight,
     paddingVertical: 10,
@@ -1124,16 +1407,18 @@ const styles = StyleSheet.create({
   },
   tab: {
     width: TAB_WIDTH,
-    paddingVertical: 12,
-    borderRadius: 0,
-    backgroundColor: theme.colors.tabInactive,
+    paddingVertical: 15,
+    borderRadius: 10,
+    marginLeft: 10,
+    marginRight: 10,
+    backgroundColor: "#80AEFF",
     alignItems: "center",
-    justifyContent: 'center',
+    justifyContent: "center",
     borderRightWidth: 1,
-    borderRightColor: '#F0F0F0',
+    borderRightColor: "#F0F0F0",
   },
   activeTab: {
-    backgroundColor: theme.colors.primary
+    backgroundColor: theme.colors.primary,
   },
   confirmedTab: {
     backgroundColor: theme.colors.successLight,
@@ -1143,12 +1428,12 @@ const styles = StyleSheet.create({
   tabText: {
     color: theme.colors.tabInactiveText,
     fontWeight: theme.font.weight.medium,
-    fontSize: theme.font.size.sm,
+    fontSize: theme.font.size.md,
     textAlign: "center",
   },
   activeTabText: {
     color: theme.colors.textOnPrimary,
-    fontWeight: theme.font.weight.bold
+    fontWeight: theme.font.weight.bold,
   },
   confirmedTabText: {
     color: theme.colors.successDark,
@@ -1192,360 +1477,247 @@ const styles = StyleSheet.create({
     fontSize: theme.font.size.md,
     fontWeight: theme.font.weight.bold,
   },
-  customerAddress: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.font.size.sm,
-    lineHeight: 20
-  },
-
-  subsection: {
-    marginTop: theme.spacing.xl
-  },
-  sectionTitle: {
-    fontSize: theme.font.size.md,
-    fontWeight: theme.font.weight.bold,
-    marginBottom: theme.spacing.sm,
-    color: theme.colors.textPrimary
-  },
-
-  listContainer: {
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.sm,
-  },
-  listCard: {
-    borderRadius: theme.borderRadius.md,
-    padding: 10,
-    borderWidth: 1.5,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  catalogCard: {
-    backgroundColor: theme.colors.primaryLighter,
-    borderColor: theme.colors.primary,
-  },
-  catalogCardAdded: {
-    backgroundColor: theme.colors.successLight,
-    borderColor: theme.colors.success,
-  },
-  catalogCardDisabled: {
-    backgroundColor: theme.colors.inputDisabledBg,
-    borderColor: theme.colors.border,
-    opacity: 0.6,
-  },
-  itemCard: {
-    backgroundColor: theme.colors.successLight,
-    borderColor: theme.colors.success,
-  },
-  listCardInfo: {
-    flex: 1,
-    marginRight: theme.spacing.sm,
-  },
-  listCardName: {
-    fontSize: theme.font.size.sm,
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.textPrimary,
-    marginBottom: 2,
-  },
-  listCardDetails: {
-    fontSize: theme.font.size.xs,
-    color: theme.colors.textSecondary,
-    fontWeight: theme.font.weight.medium,
-    marginBottom: 2,
-  },
-  listCardPrice: {
-    fontSize: theme.font.size.xs,
-    color: theme.colors.textSecondary,
-    fontWeight: theme.font.weight.semibold,
-  },
-  listCardActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-  },
-
-  textInputDisabled: {
-    color: theme.colors.inputDisabled,
-    backgroundColor: theme.colors.inputDisabledBg,
-    borderColor: theme.colors.border,
-  },
-
-  priceInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: theme.colors.inputBorder,
-    borderRadius: theme.borderRadius.sm,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 8,
-    backgroundColor: theme.colors.inputBackground,
-  },
-  rupeeSymbol: {
-    fontSize: theme.font.size.sm,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.colors.textPrimary,
-    marginRight: theme.spacing.xs,
-  },
-  priceInput: {
-    padding: 0,
-    width: 50,
-    fontSize: theme.font.size.sm,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.colors.textPrimary,
-    backgroundColor: theme.colors.inputBackground,
-  },
-
-  addButton: {
-    backgroundColor: theme.colors.success,
-    borderRadius: theme.borderRadius.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    minWidth: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addButtonDisabled: {
-    backgroundColor: theme.colors.disabled,
-  },
-  addButtonText: {
-    color: theme.colors.textOnPrimary,
-    fontWeight: theme.font.weight.bold,
-    fontSize: theme.font.size.xs,
-  },
-  addedBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  addedBadgeText: {
-    color: theme.colors.successDark,
-    fontSize: theme.font.size.md,
-    fontWeight: theme.font.weight.bold,
-  },
-
-  removeButton: {
-    backgroundColor: theme.colors.errorLight,
-    borderColor: theme.colors.errorBorder,
-    borderWidth: 1.5,
-    borderRadius: theme.borderRadius.sm,
-    width: 34,
-    height: 34,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 0,
-  },
-  removeButtonText: {
-    color: theme.colors.errorDark,
-    fontSize: 16,
-    fontWeight: 'bold',
-    lineHeight: 16,
-  },
-
-  grandTotalText: {
-    fontSize: theme.font.size.lg,
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.textPrimary,
-    textAlign: 'right',
-    marginTop: theme.spacing.md,
-    paddingTop: theme.spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-
-  addProductsButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.lg,
-    padding: 18,
-    alignItems: "center",
-    marginTop: theme.spacing.lg,
-  },
-  addProductsButtonSecondary: {
-    backgroundColor: 'transparent',
-    borderColor: theme.colors.primary,
-    borderWidth: 2,
-    padding: 16,
-  },
-  addProductsButtonText: {
-    color: theme.colors.textOnPrimary,
-    fontWeight: theme.font.weight.bold,
-    fontSize: theme.font.size.lg,
-  },
-  addProductsButtonSecondaryText: {
-    color: theme.colors.primary,
-  },
 
   // NEW DESIGN STYLES
   headerTopBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
-    backgroundColor: '#fff',
+    // backgroundColor: "#fff",
     zIndex: 1100,
   },
   hamburgerButton: {
     padding: 8,
     borderRadius: 8,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: "#F1F5F9",
   },
-  syncButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
-  },
+  // syncButton: {
+  //   padding: 8,
+  //   borderRadius: 8,
+  //   backgroundColor: "#F1F5F9",
+  // },
   menuOverlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 50,
     right: 16,
     width: 200,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 10,
     paddingVertical: 8,
     zIndex: 1200,
     elevation: 15,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
     borderWidth: 1,
-    borderColor: '#F0F0F0',
+    borderColor: "#F0F0F0",
   },
   menuItem: {
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: "#F0F0F0",
   },
   menuItemText: {
     fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
+    color: "#333",
+    fontWeight: "500",
   },
   skipButton: {
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
+    // backgroundColor: "#EF4444",
+    // paddingHorizontal: 16,
+    // paddingVertical: 8,
+    // borderRadius: 8,
+    alignSelf: "center",
     marginLeft: 16,
-    marginBottom: 8,
+    // marginBottom: 8,
   },
   skipButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
+    color: "#757575",
+    fontWeight: "500",
+    fontSize: 24,
   },
   // STYLES FOR THE NEW CARD DESIGN
   customerCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderRadius: 10,
-    marginHorizontal: 13,
+    margin: 20,
     padding: 16,
-    // Darker M3/Elevation Light/1 Shadow
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4,
     shadowRadius: 4,
     elevation: 6,
-    marginBottom: 20,
   },
   centeredCustomerHeader: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingBottom: 16,
     marginBottom: 16,
   },
   centeredCustomerName: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#3880FF',
-    textAlign: 'center',
+    fontSize: 30,
+    fontWeight: "800",
+    color: "#590194",
+    textAlign: "center",
     marginBottom: 8,
   },
   underLine: {
     height: 1,
-    backgroundColor: '#CBD5E1', // Darker gray for better definition
-    position: 'absolute',
+    backgroundColor: "#CBD5E1",
+    position: "absolute",
     bottom: 0,
     left: -16,
     right: -16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 }, // Cast shadow further down
-    shadowOpacity: 0.15, // Significantly darker shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
     shadowRadius: 3,
     elevation: 3,
   },
-  productItemCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#3880FF',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    backgroundColor: '#fff',
+  productsListWrapper: {
+    marginTop: 16,
+    // borderRadius: 16,
+    borderColor: "#cac4d0",
+    backgroundColor: "#FFFFFF",
+    // borderWidth: 1,
+    overflow: "hidden",
+    flex: 1,
+    maxHeight: 400,
   },
-  qtyInputBox: {
-    textAlign: 'center',
+  productsListContainer: {
+    paddingVertical: 8,
+  },
+  productRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+    height: 80,
+    backgroundColor: "#FFFFFF",
+  },
+  lastRowStyle: {
+    borderBottomWidth: 0,
+  },
+  imageWrapper: {
     width: 60,
-    height: 40,
+    height: 60,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  productImage: {
+    width: 60,
+    height: 60,
+  },
+  textWrapper: {
+    flex: 1,
+    justifyContent: "center",
+    paddingRight: 8,
+  },
+  productNameText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1E293B",
+    letterSpacing: 0.3,
+    marginBottom: 2,
+  },
+  availableQtyText: {
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "500",
+  },
+  inputWrapper: {
+    justifyContent: "center",
+  },
+  input: {
+    width: 70,
+    height: 44,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
+    borderColor: "#CBD5E1",
     borderRadius: 8,
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    textAlign: "center",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#0F172A",
+    backgroundColor: "#FFFFFF",
+  },
+  checkmarkIcon: {
+    justifyContent: "center",
+    alignItems: "center",
   },
   paymentSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 0,
     marginTop: 20,
     marginBottom: 10,
   },
   paymentInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 2,
-    borderColor: '#10B981',
+    borderColor: "#10B981",
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#fff',
-    width: 140,
+    paddingVertical: 11,
+    backgroundColor: "#fff",
+    width: "48%",
   },
   paymentInput: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#333',
+    fontWeight: "700",
+    color: "#333",
     flex: 1,
     padding: 0,
     borderWidth: 0,
+    alignSelf: "center",
     // @ts-ignore
-    outlineStyle: 'none' as any,
+    outlineStyle: "none" as any,
   },
   collectButton: {
-    backgroundColor: '#10B981',
+    width: "48%",
+    backgroundColor: "#10B981",
     paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingVertical: 13,
     borderRadius: 8,
   },
   collectButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 20,
+    alignSelf: "center",
   },
   otherProductButton: {
-    backgroundColor: '#3880FF',
-    borderRadius: 10,
-    paddingVertical: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#3880FF",
+    paddingVertical: 14,
+    paddingHorizontal: 10,
     marginTop: 10,
   },
   otherProductButtonText: {
-    color: '#fff',
-    fontWeight: '800',
+    color: "#757575",
+    fontWeight: "500",
     fontSize: 18,
+    alignSelf: "flex-start",
+  },
+  iconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: "#757575",
+    alignItems: "center",
   },
   fixedButtonContainer: {
     position: "absolute",
@@ -1555,12 +1727,12 @@ const styles = StyleSheet.create({
     zIndex: 1000, // Higher z-index to stay on top
   },
   confirmButton: {
-    backgroundColor: '#3880FF',
+    backgroundColor: "#590194",
     borderRadius: 12,
-    padding: 18,
+    padding: 15,
     alignItems: "center",
     elevation: 8,
-    shadowColor: '#3880FF',
+    shadowColor: "#590194",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1570,7 +1742,7 @@ const styles = StyleSheet.create({
   },
   confirmButtonText: {
     color: theme.colors.textOnPrimary,
-    fontWeight: '800',
-    fontSize: 20,
+    fontWeight: "600",
+    fontSize: 25,
   },
-})
+});
