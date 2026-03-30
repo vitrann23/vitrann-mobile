@@ -4,10 +4,29 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+
 export default function EntriesSubmitted() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const amount = params.amount || '0';
+
+  const handleLogout = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        await AsyncStorage.removeItem('authToken');
+        await AsyncStorage.removeItem('workerId');
+      } else {
+        await SecureStore.deleteItemAsync('authToken');
+        await SecureStore.deleteItemAsync('workerId');
+      }
+      await AsyncStorage.multiRemove(['workerName', 'userType']);
+      router.replace('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -31,11 +50,11 @@ export default function EntriesSubmitted() {
 
         <TouchableOpacity 
           style={styles.button}
-          onPress={() => router.back()}
+          onPress={handleLogout}
           activeOpacity={0.8}
         >
-          <Ionicons name="arrow-undo" size={20} color="#FFFFFF" style={styles.buttonIcon} />
-          <Text style={styles.buttonText}>Go Back</Text>
+          <Ionicons name="log-out-outline" size={24} color="#FFFFFF" style={styles.buttonIcon} />
+          <Text style={styles.buttonText}>Logout</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
