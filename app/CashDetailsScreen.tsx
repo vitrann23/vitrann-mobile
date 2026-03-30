@@ -139,7 +139,7 @@ export default function CashDetailsScreen() {
       } else {
         if (response.message === "Cash in hand entry already exists for today" && response.data) {
           router.push({
-            pathname: "/EntriesSubmitted",
+            pathname: "/EntriesSubmitted" as any,
             params: { amount: response.data.amount }
           })
           return;
@@ -154,7 +154,7 @@ export default function CashDetailsScreen() {
       const errorData = error?.response?.data
       if (errorData?.message === "Cash in hand entry already exists for today" && errorData?.data) {
         router.push({
-          pathname: "/EntriesSubmitted",
+          pathname: "/EntriesSubmitted" as any,
           params: { amount: errorData.data.amount }
         })
         return;
