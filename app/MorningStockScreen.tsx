@@ -80,7 +80,7 @@ const MorningStockScreen = () => {
         if (result.success && Array.isArray(result.data)) {
           const validProducts = result.data.filter(
             (p: Product) => p && p.inventory && p.inventory.inventoryId,
-          );
+          ).sort((a: Product, b: Product) => a.productId - b.productId);
           setProducts(validProducts);
 
           if (!isRefresh) {
