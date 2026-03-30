@@ -196,11 +196,22 @@ export default function CustomerDeliveryScreen() {
           continue;
         }
 
+        const billAmount = item.qty * item.price;
+
+        if (item.qty < 0 || billAmount <= 0) {
+          Alert.alert(
+            "Invalid Entry",
+            `Delivery quantity must be >= 0 and bill amount must be > 0 for ${item.name}.`
+          );
+          setProcessingDelivery(false);
+          return;
+        }
+
         const itemPayload = {
           customerId: customer.customerId,
           inventoryId: inventoryItem.inventoryId,
           deliveredQuantity: item.qty,
-          billAmount: item.qty * item.price,
+          billAmount: billAmount,
           isPriceCustomized: item.isEdited,
         };
 
