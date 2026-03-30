@@ -73,6 +73,22 @@ const MorningStockScreen = () => {
       try {
         const name = await AsyncStorage.getItem("workerName");
         setWorkerName(name || `Worker ${workerId}`);
+
+        // Preemptive check: If the user already submitted cash today, route them directly to the EntriesSubmitted UI
+        try {
+          const cashResponse = (await apiClient.get("/deliveries/total-amount")) as any;
+          if (cashResponse?.success && cashResponse?.data?.amount !== undefined) {
+             router.replace({
+               pathname: "/EntriesSubmitted" as any,
+               params: { amount: cashResponse.data.amount }
+             });
+             return; // Stop loading products
+          }
+        } catch (err) {
+          // If no entry exists or API returns an error, we just proceed normally
+          console.log("No existing daily entry found, proceeding to load products.");
+        }
+
         const response = (await apiClient.get(
           "/products/products-with-latest-inventory",
         )) as any;
