@@ -145,7 +145,7 @@ export default function Index() {
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.logoContainer}>
             <Image
-              source={require('../assets/images/logo-vitran-primary.png')}
+              source={require('../assets/images/logo.png')}
               style={styles.logo}
               resizeMode="contain"
             />
