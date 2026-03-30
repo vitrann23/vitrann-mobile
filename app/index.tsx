@@ -224,22 +224,21 @@ export default function Index() {
   )
 }
 
-// Barebones styles for Step 3a: UI Skeleton only
 const styles = StyleSheet.create({
-  safeArea: {},
-  container: {},
-  content: {},
-  logoContainer: {},
-  logo: {},
-  title: {},
-  formContainer: {},
-  label: {},
-  inputContainer: { flexDirection: "row", alignItems: "center" },
-  icon: {},
-  prefix: {},
-  inputWithIcon: {},
-  loginButton: {},
-  loginButtonDisabled: {},
-  loginButtonText: {},
-  loadingContainer: { flexDirection: "row" },
+  safeArea: { flex: 1, backgroundColor: "#FFFFFF" },
+  container: { flex: 1, backgroundColor: "#FFFFFF" },
+  content: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 30 },
+  logoContainer: { alignItems: "center", marginBottom: 30, marginTop: 40 },
+  logo: { width: 180, height: 180 },
+  title: { fontSize: 20, color: "#6B7280", textAlign: "center", marginBottom: 40, fontWeight: "600" },
+  formContainer: { width: "100%" },
+  label: { fontSize: 13, color: "#9CA3AF", marginBottom: 8, fontWeight: "500", marginLeft: 4 },
+  inputContainer: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 8, height: 50, paddingHorizontal: 16, marginBottom: 24, backgroundColor: "#FFFFFF" },
+  icon: { marginRight: 12 },
+  prefix: { fontSize: 16, color: "#111827", fontWeight: "400", marginRight: 4, letterSpacing: 1 },
+  inputWithIcon: { flex: 1, height: "100%", fontSize: 16, color: "#111827", letterSpacing: 1 },
+  loginButton: { height: 50, backgroundColor: "#590194", borderRadius: 8, justifyContent: "center", alignItems: "center", marginTop: 10 },
+  loginButtonDisabled: { opacity: 0.6 },
+  loginButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700", letterSpacing: 1 },
+  loadingContainer: { flexDirection: "row", alignItems: "center" },
 })
