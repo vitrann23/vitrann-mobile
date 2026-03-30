@@ -19,6 +19,14 @@
         "env": {
           "EXPO_PUBLIC_API_BASE_URL": "https://theinfranova.com/api"
         }
+      },
+      "apk": {
+        "android": {
+          "buildType": "apk"
+        },
+        "env": {
+          "EXPO_PUBLIC_API_BASE_URL": "https://theinfranova.com/api"
+        }
       }
     },
     "submit": {
