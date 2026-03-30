@@ -137,11 +137,28 @@ export default function CashDetailsScreen() {
         }, 1200)
 
       } else {
+        if (response.message === "Cash in hand entry already exists for today" && response.data) {
+          router.push({
+            pathname: "/EntriesSubmitted",
+            params: { amount: response.data.amount }
+          })
+          return;
+        }
         throw new Error(response.message || 'Failed to submit amount')
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting total amount:', error)
+
+      // In case it comes back as an HTTP error rather than a 201 with success: false
+      const errorData = error?.response?.data
+      if (errorData?.message === "Cash in hand entry already exists for today" && errorData?.data) {
+        router.push({
+          pathname: "/EntriesSubmitted",
+          params: { amount: errorData.data.amount }
+        })
+        return;
+      }
 
       Toast.show({
         type: 'error',
