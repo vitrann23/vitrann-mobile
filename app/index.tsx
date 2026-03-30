@@ -160,7 +160,7 @@ export default function Index() {
               <Text style={styles.prefix}>+91 - </Text>
               <TextInput
                 style={styles.inputWithIcon}
-                placeholder="9111111111"
+                placeholder=""
                 value={phoneNumber}
                 onChangeText={(text) => {
                   const cleanText = text.replace(/[^0-9]/g, "").slice(0, 10)
