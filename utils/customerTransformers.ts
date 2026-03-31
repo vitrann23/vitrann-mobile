@@ -9,7 +9,7 @@ export const transformCustomersForDelivery = (
 ): CustomerForDelivery[] => {
     const sortedCustomers = customers.sort((a, b) => a.sequenceNumber - b.sequenceNumber);
     const activeRelations = relations.filter(rel => rel.thruDate === null && rel.productId !== null);
-
+    
     return sortedCustomers.map((item) => {
         const customerRelations = activeRelations.filter(rel => rel.customerId === item.customer.customerId);
         
@@ -25,10 +25,18 @@ export const transformCustomersForDelivery = (
             }
         });
 
+        // Robust B2B Identification: check classification and other potential API fields
+        const isB2B = 
+            item.customer?.classification?.toUpperCase() === 'B2B' || 
+            (item as any).classification?.toUpperCase() === 'B2B' ||
+            (item.customer as any)?.type?.toUpperCase() === 'B2B' ||
+            (item as any).customerType?.toUpperCase() === 'B2B';
+
         return {
             id: item.customer.customerId.toString(),
-            name: `${item.customer.firstName} ${item.customer.lastName || ''}`.trim(),
-            type: item.customer.classification === 'B2B' ? 'B2B' : 'B2C',
+            name: `${item.customer?.firstName || 'Unknown'} ${item.customer?.lastName || ''}`.trim(),
+            type: isB2B ? 'B2B' : 'B2C',
+            isPaid: false, // Initial state for all customers
             address: `${item.customer.address1}${item.customer.address2 ? ', ' + item.customer.address2 : ''}, ${item.customer.city || ''} ${item.customer.pincode || ''}`.trim(),
             deliveredItems: [],
             paymentReceived: 0,
