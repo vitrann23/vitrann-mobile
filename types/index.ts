@@ -97,6 +97,7 @@ export interface CustomerForDelivery {
     sequenceNumber: number;
     associatedProductIds?: number[];
     associatedProductPrices?: Record<number, { price: number, isCustom: boolean }>;
+    isPaid: boolean;
 }
 
 export interface OfflineQueueItem {
