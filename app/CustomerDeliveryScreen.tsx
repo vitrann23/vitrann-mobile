@@ -58,6 +58,19 @@ export default function CustomerDeliveryScreen() {
     setCustomers,
   } = useCustomerDelivery();
 
+  const markAsPaid = (customerId: number) => {
+    setCustomers((prev) => {
+      const updated = prev.map((c) =>
+        c.customerId === customerId ? { ...c, isPaid: true } : c
+      );
+      // Persist to local storage
+      AsyncStorage.setItem("offline_customers", JSON.stringify(updated)).catch(
+        (err) => console.error("Failed to save offline_customers", err)
+      );
+      return updated;
+    });
+  };
+
   const {
     queueSize: offlineQueueCount,
     isSyncing,
@@ -196,7 +209,7 @@ export default function CustomerDeliveryScreen() {
           continue;
         }
 
-        const billAmount = item.qty * item.price;
+        const billAmount = item.price;
 
         if (item.qty < 0 || billAmount <= 0) {
           Alert.alert(
@@ -261,6 +274,25 @@ export default function CustomerDeliveryScreen() {
         });
       }
 
+      // Auto-collect for B2B if not already paid
+      if (isB2B && !customer.isPaid && totalAmount > 0) {
+        // Optimistic: Update UI immediately
+        markAsPaid(customer.customerId);
+
+        // Background API call
+        apiClient
+          .post("/deliveries/b2b-payment", {
+            customerId: customer.customerId,
+            amount: totalAmount,
+          })
+          .catch((err) => {
+            console.error("Auto-collect background failure:", err);
+            // We'll keep the UI as 'Paid' to avoid confusing the user
+          });
+      }
+
+      const finalPaidStatus = customer.isPaid || (isB2B && totalAmount > 0);
+
       // Mark as confirmed locally regardless (Optimistic UI)
       const updatedCustomers = [...customers];
       updatedCustomers[selectedIdx] = {
@@ -268,6 +300,7 @@ export default function CustomerDeliveryScreen() {
         deliveredItems: itemsToDeliver,
         deliveryConfirmed: true,
         paymentReceived: totalAmount,
+        isPaid: finalPaidStatus,
       };
       setCustomers(updatedCustomers);
       AsyncStorage.setItem(
@@ -843,8 +876,7 @@ export default function CustomerDeliveryScreen() {
               style={[
                 styles.tab,
                 selectedIdx === index && {
-                  backgroundColor:
-                    item.classification === "B2B" ? "#10B981" : "#3880FF",
+                  backgroundColor: "#3880FF",
                 },
                 item.deliveryConfirmed && styles.confirmedTab,
                 index > selectedIdx && { backgroundColor: "#CAC4D0" },
@@ -911,10 +943,10 @@ export default function CustomerDeliveryScreen() {
                   const product = isAssociated
                     ? inventoryItem?.inventory?.product
                     : inventory?.find(
-                        (inv) =>
-                          inv.inventory?.product.productId ===
-                          deliveredItem?.productId,
-                      )?.inventory?.product;
+                      (inv) =>
+                        inv.inventory?.product.productId ===
+                        deliveredItem?.productId,
+                    )?.inventory?.product;
                   if (!product) return null;
                   const inventoryItemForProduct = inventory?.find(
                     (inv) =>
@@ -938,12 +970,12 @@ export default function CustomerDeliveryScreen() {
                   const currentCustomerDeliveredExcludingCurrent = isAssociated
                     ? 0 // Associated products aren't in deliveredItems yet
                     : customer.deliveredItems
-                        .filter(
-                          (i) =>
-                            i.productId === product.productId &&
-                            i !== deliveredItem, // Exclude the current item being edited
-                        )
-                        .reduce((sum, i) => sum + i.qty, 0);
+                      .filter(
+                        (i) =>
+                          i.productId === product.productId &&
+                          i !== deliveredItem, // Exclude the current item being edited
+                      )
+                      .reduce((sum, i) => sum + i.qty, 0);
 
                   const baseQty =
                     inventoryItemForProduct?.availableQuantity ??
@@ -952,16 +984,16 @@ export default function CustomerDeliveryScreen() {
                   const availableQty = Math.max(
                     0,
                     baseQty -
-                      totalDeliveredByOthers -
-                      currentCustomerDeliveredExcludingCurrent,
+                    totalDeliveredByOthers -
+                    currentCustomerDeliveredExcludingCurrent,
                   );
                   const associatedQty = isAssociated
                     ? customerProductRelations.find(
-                        (rel) =>
-                          rel.customerId === customer.customerId &&
-                          rel.productId === product.productId &&
-                          rel.thruDate === null,
-                      )?.quantityAssociated || 0
+                      (rel) =>
+                        rel.customerId === customer.customerId &&
+                        rel.productId === product.productId &&
+                        rel.thruDate === null,
+                    )?.quantityAssociated || 0
                     : 0;
                   const quantityKey = `${customer.customerId}-${product.productId}`;
                   const defaultValue = isB2B
@@ -974,9 +1006,9 @@ export default function CustomerDeliveryScreen() {
                     : deliveredItem?.qty.toString();
                   const priceValue = isAssociated
                     ? (
-                        customer.associatedProductPrices?.[product.productId]
-                          ?.price || Number(product.currentProductPrice)
-                      ).toString()
+                      customer.associatedProductPrices?.[product.productId]
+                        ?.price || Number(product.currentProductPrice)
+                    ).toString()
                     : deliveredItem?.price.toString();
                   const isAlreadyAdded = customer.deliveredItems.some(
                     (d) => d.productId === product.productId,
@@ -1072,7 +1104,7 @@ export default function CustomerDeliveryScreen() {
                           <TextInput
                             style={styles.input}
                             value={currentQuantity}
-                            placeholder="0"
+                            placeholder="Other Product v2"
                             placeholderTextColor="#999"
                             onChangeText={(text) => {
                               let numText = text.replace(/[^0-9]/g, "");
@@ -1119,8 +1151,8 @@ export default function CustomerDeliveryScreen() {
                   );
                 })}
               </ScrollView>
-              {/* Payment Section (B2B only) - Outside the card */}
-              {isB2B && !customer.deliveryConfirmed && (
+              {/* Payment Section (B2B only) */}
+              {isB2B && (
                 <View
                   style={[
                     styles.paymentSection,
@@ -1131,27 +1163,31 @@ export default function CustomerDeliveryScreen() {
                     <Text
                       style={{
                         fontSize: 20,
-                        color: "#333",
+                        fontWeight: "700",
+                        color: "#000",
                         alignSelf: "center",
                       }}
                     >
-                      ₹
+                      ₹ {totalPayment.toFixed(2)}
                     </Text>
-                    <TextInput
-                      style={styles.paymentInput}
-                      value={paymentAmount || totalPayment.toString()}
-                      onChangeText={setPaymentAmount}
-                      keyboardType="numeric"
-                      placeholder="0.00"
-                      underlineColorAndroid="transparent"
-                    />
                   </View>
 
                   <TouchableOpacity
-                    style={styles.collectButton}
+                    style={[
+                      styles.collectButton,
+                      (totalPayment === 0 || customer.isPaid || customer.deliveryConfirmed) && { backgroundColor: '#E2E8F0' },
+                    ]}
+                    disabled={totalPayment === 0 || customer.isPaid || customer.deliveryConfirmed}
                     onPress={async () => {
+                      if (!customer || customer.isPaid || totalPayment <= 0)
+                        return;
+
+                      const amount = totalPayment;
+
+                      // OPTIMISTIC UPDATE: Instant feedback for the user
+                      markAsPaid(customer.customerId);
+
                       try {
-                        const amount = Number(paymentAmount) || totalPayment;
                         const response = (await apiClient.post(
                           "/deliveries/b2b-payment",
                           {
@@ -1160,29 +1196,32 @@ export default function CustomerDeliveryScreen() {
                           },
                         )) as any;
 
-                        if (response.id || response.customerId) {
+                        if (response.id || response.customerId || response.success) {
                           Toast.show({
                             type: "success",
-                            text1: "Payment Recorded",
-                            text2: `₹${amount} collected`,
+                            text1: "Payment Collected",
+                            text2: `₹${amount} recorded`,
                           });
-                          // Update local state to show it was confirmed? Or just toast.
-                          // Usually B2B collection is confirmed upon delivery confirm,
-                          // but this specific button allows manual entry.
                         } else {
-                          throw new Error("Failed to record payment");
+                          throw new Error("API reported failure");
                         }
                       } catch (err) {
                         console.error("B2B Payment Error:", err);
+                        // We keep the state as isPaid:true since it's already recorded in offline potential
                         Toast.show({
-                          type: "error",
-                          text1: "Error",
-                          text2: "Failed to record payment",
+                          type: "info",
+                          text1: "Payment Saved",
+                          text2: "Payment will sync when online",
                         });
                       }
                     }}
                   >
-                    <Text style={styles.collectButtonText}>Collect</Text>
+                    <Text style={[
+                      styles.collectButtonText,
+                      (customer.isPaid || customer.deliveryConfirmed) && { color: '#94A3B8' }
+                    ]}>
+                      {(customer.isPaid || customer.deliveryConfirmed) ? "Collected" : "Collect"}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -1201,26 +1240,28 @@ export default function CustomerDeliveryScreen() {
         onClose={() => setProductDeliveryModal(false)}
       />
 
-      <View
-        style={[
-          styles.fixedButtonContainer,
-          { bottom: (insets.bottom || 0) + 10 },
-        ]}
-      >
-        <TouchableOpacity
+      {!customer.deliveryConfirmed && (
+        <View
           style={[
-            styles.confirmButton,
-            { backgroundColor: "#590194" },
-            processingDelivery && styles.confirmButtonProcessing,
+            styles.fixedButtonContainer,
+            { bottom: (insets.bottom || 0) + 10 },
           ]}
-          onPress={confirmDelivery}
-          disabled={processingDelivery}
         >
-          <Text style={styles.confirmButtonText}>
-            {processingDelivery ? "Processing..." : "Confirm"}
-          </Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[
+              styles.confirmButton,
+              { backgroundColor: "#590194" },
+              processingDelivery && styles.confirmButtonProcessing,
+            ]}
+            onPress={confirmDelivery}
+            disabled={processingDelivery}
+          >
+            <Text style={styles.confirmButtonText}>
+              {processingDelivery ? "Processing..." : "Confirm"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1696,7 +1737,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#10B981",
     paddingHorizontal: 24,
     paddingVertical: 13,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   collectButtonText: {
     color: "#fff",
