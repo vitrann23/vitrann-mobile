@@ -40,27 +40,50 @@ export const useCustomerDelivery = () => {
 
     // Transform data when available
     useEffect(() => {
-        if (customersData && relationsData && !isApiLoading) {
-            try {
-                const transformed = transformCustomersForDelivery(customersData, relationsData);
-                setCustomers(transformed);
-                setLoading(false);
+        const syncData = async () => {
+            if (customersData && relationsData && !isApiLoading) {
+                try {
+                    const transformed = transformCustomersForDelivery(customersData, relationsData);
+                    
+                    // MERGE WITH CACHE: Preserve local status flags
+                    const cachedStr = await AsyncStorage.getItem('offline_customers');
+                    const cached: CustomerForDelivery[] = cachedStr ? JSON.parse(cachedStr) : [];
+                    
+                    const merged = transformed.map(tc => {
+                        const local = cached.find(lc => lc.id === tc.id);
+                        if (local) {
+                            return {
+                                ...tc,
+                                isPaid: local.isPaid || tc.isPaid,
+                                deliveryConfirmed: local.deliveryConfirmed || tc.deliveryConfirmed,
+                                deliveredItems: local.deliveryConfirmed ? local.deliveredItems : tc.deliveredItems,
+                                paymentReceived: local.deliveryConfirmed ? local.paymentReceived : tc.paymentReceived
+                            };
+                        }
+                        return tc;
+                    });
 
-                // Cache for offline use
-                AsyncStorage.setItem('offline_customers', JSON.stringify(transformed));
-                if (inventoryData) {
-                    AsyncStorage.setItem('offline_inventory', JSON.stringify(inventoryData));
+                    setCustomers(merged);
+                    setLoading(false);
+
+                    // Cache for offline use
+                    AsyncStorage.setItem('offline_customers', JSON.stringify(merged));
+                    if (inventoryData) {
+                        AsyncStorage.setItem('offline_inventory', JSON.stringify(inventoryData));
+                    }
+                    AsyncStorage.setItem('offline_relations', JSON.stringify(relationsData));
+                } catch (error) {
+                    console.error('Error transforming data:', error);
+                    handleApiError(error, 'Data Transformation');
+                    setLoading(false);
                 }
-                AsyncStorage.setItem('offline_relations', JSON.stringify(relationsData));
-            } catch (error) {
-                console.error('Error transforming data:', error);
-                handleApiError(error, 'Data Transformation');
-                setLoading(false);
+            } else if (apiError) {
+                // Try loading from offline cache
+                loadFromCache();
             }
-        } else if (apiError) {
-            // Try loading from offline cache
-            loadFromCache();
-        }
+        };
+        
+        syncData();
     }, [customersData, relationsData, inventoryData, isApiLoading, apiError]);
 
     const loadFromCache = async () => {

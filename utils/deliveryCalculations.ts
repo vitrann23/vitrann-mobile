@@ -4,7 +4,7 @@ import { DeliveredItem } from '../types';
  * Calculate total payment from delivered items
  */
 export const calculateTotalPayment = (items: DeliveredItem[]): number => {
-    return items.reduce((sum, item) => sum + (item.price * item.qty), 0);
+    return items.reduce((sum, item) => sum + item.price, 0);
 };
 
 /**
