@@ -12,6 +12,7 @@
     "set-icon": "npx react-native-make set-icon"
   },
   "dependencies": {
+    "@expo-google-fonts/league-spartan": "^0.4.2",
     "@expo/metro-runtime": "~5.0.5",
     "@expo/vector-icons": "^14.1.0",
     "@react-native-async-storage/async-storage": "2.1.2",
@@ -56,7 +57,6 @@
     "@babel/core": "^7.25.2",
     "@react-native-community/cli": "^20.0.0",
     "@types/react": "~19.0.10",
-
     "eslint": "^9.25.0",
     "eslint-config-expo": "~9.2.0",
     "react-native-make": "^1.0.1",

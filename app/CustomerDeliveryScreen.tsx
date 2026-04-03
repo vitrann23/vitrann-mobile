@@ -1481,10 +1481,10 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0", // Subtle border
   },
   activeTab: {
-    backgroundColor: "#3B82F6", // Professional Blue
-    borderColor: "#2563EB",
+    backgroundColor: "#590194", // Brand Purple
+    borderColor: "#590194",
     transform: [{ scale: 1.05 }],
-    shadowColor: "#3B82F6",
+    shadowColor: "#590194",
     shadowOpacity: 0.4,
   },
   confirmedTab: {
@@ -1626,6 +1626,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     margin: 20,
     padding: 16,
+    borderWidth: 2,
+    borderColor: "#590194",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4,
