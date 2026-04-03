@@ -20,6 +20,7 @@ import Toast from 'react-native-toast-message';
 import apiClient from '../services/apiClient';
 import { useInventory } from '../hooks/useInventory';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getProductImageSource } from '../utils/productImages';
 
 // Mock Data
 // Product Interface
@@ -73,6 +74,7 @@ export default function InventoryManagementScreen() {
     const [quantities, setQuantities] = useState<Record<number, string>>({});
     const [manualAmount, setManualAmount] = useState('');
     const [showWorkerDropdown, setShowWorkerDropdown] = useState(false);
+    const [submitted, setSubmitted] = useState(false);
 
     const fetchProducts = async () => {
         try {
@@ -115,7 +117,7 @@ export default function InventoryManagementScreen() {
     }, []);
 
     const filteredProducts = useMemo(() => {
-        return products;
+        return [...products].sort((a, b) => a.productId - b.productId);
     }, [products]);
 
     const handleQtyChange = (productId: number, qty: string) => {
@@ -218,10 +220,10 @@ export default function InventoryManagementScreen() {
                 // Force refetch of inventory throughout the app
                 await queryClient.invalidateQueries({ queryKey: ['inventory'] });
 
-                // Reset UI
                 setQuantities({});
                 setSelectedWorkerId(null);
                 setManualAmount('');
+                setSubmitted(true);
             } else {
                 Toast.show({ type: 'error', text1: 'Failed', text2: 'Could not complete operation' });
             }
@@ -260,6 +262,7 @@ export default function InventoryManagementScreen() {
                             setActiveTab(tab);
                             setQuantities({});
                             setShowWorkerDropdown(false);
+                            setSubmitted(false); // Reset submitted state on tab change
                         }}
                     >
                         <View style={styles.radioContainer}>
@@ -349,7 +352,19 @@ export default function InventoryManagementScreen() {
                             {filteredProducts.map((product, idx) => (
                                 <View key={product.productId} style={styles.productCard}>
                                     <View style={styles.productLeft}>
-                                        <Image source={{ uri: product.imageUrl }} style={styles.productImage} />
+                                        {(() => {
+                                            const imgSrc = getProductImageSource({
+                                                productName: product.productName,
+                                                imageUrl: product.imageUrl,
+                                            });
+                                            return imgSrc ? (
+                                                <Image source={imgSrc} style={styles.productImage} resizeMode="contain" />
+                                            ) : (
+                                                <View style={[styles.productImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 6 }]}>
+                                                    <Ionicons name="cube-outline" size={30} color="#CBD5E1" />
+                                                </View>
+                                            );
+                                        })()}
                                         <View style={styles.productInfo}>
                                             <Text style={styles.productName}>{product.productName}</Text>
                                             <Text style={styles.availabilityText}>
@@ -397,11 +412,14 @@ export default function InventoryManagementScreen() {
                         {/* Action Button */}
                         <View style={styles.actionButtonContainer}>
                             <TouchableOpacity
-                                style={styles.actionButton}
+                                style={[styles.actionButton, submitted && styles.actionButtonSubmitted]}
                                 onPress={handleSubmit}
+                                disabled={submitted || loading}
                             >
                                 <Text style={styles.actionButtonText}>
-                                    {activeTab === 'ADD' ? 'Add Products' : activeTab === 'TRANSFER' ? 'Transfer' : 'Purchase'}
+                                    {submitted
+                                        ? (activeTab === 'ADD' ? 'Added ✓' : activeTab === 'TRANSFER' ? 'Transferred ✓' : 'Purchased ✓')
+                                        : (activeTab === 'ADD' ? 'Add Products' : activeTab === 'TRANSFER' ? 'Transfer' : 'Purchase')}
                                 </Text>
                             </TouchableOpacity>
                         </View>
@@ -450,7 +468,7 @@ const styles = StyleSheet.create({
         borderColor: '#D1D5DB',
     },
     activeTabButton: {
-        borderColor: '#3880FF',
+        borderColor: '#590194',
         borderWidth: 2,
     },
     radioContainer: {
@@ -468,13 +486,13 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     radioButtonActive: {
-        borderColor: '#3880FF',
+        borderColor: '#590194',
     },
     radioInner: {
         width: 10,
         height: 10,
         borderRadius: 5,
-        backgroundColor: '#3880FF',
+        backgroundColor: '#590194',
     },
     tabButtonText: {
         fontSize: 15,
@@ -482,8 +500,9 @@ const styles = StyleSheet.create({
         color: '#6B7280',
     },
     activeTabButtonText: {
-        color: '#3880FF',
+        color: '#590194',
         fontWeight: '700',
+        fontFamily: 'LeagueSpartan_700Bold',
     },
     searchBarWrapper: {
         paddingHorizontal: 16,
@@ -519,9 +538,8 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         borderRadius: 12,
         borderWidth: 2,
-        borderColor: '#3880FF',
+        borderColor: '#590194',
         padding: 0,
-        // Premium Shadow
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.15,
@@ -580,7 +598,7 @@ const styles = StyleSheet.create({
     },
     headerDivider: {
         height: 2,
-        backgroundColor: '#3880FF',
+        backgroundColor: '#590194',
         marginTop: 4,
     },
     productCard: {
@@ -590,7 +608,7 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         paddingHorizontal: 16,
         borderBottomWidth: 2,
-        borderBottomColor: '#3880FF',
+        borderBottomColor: '#590194',
     },
     productLeft: {
         flexDirection: 'row',
@@ -613,7 +631,7 @@ const styles = StyleSheet.create({
     },
     availabilityText: {
         fontSize: 14,
-        color: '#3880FF',
+        color: '#590194',
         fontWeight: '700',
         marginTop: 2,
     },
@@ -698,21 +716,27 @@ const styles = StyleSheet.create({
         paddingBottom: 20,
     },
     actionButton: {
-        backgroundColor: '#3880FF',
+        backgroundColor: '#590194',
         borderRadius: 10,
         height: 56,
         justifyContent: 'center',
         alignItems: 'center',
         elevation: 4,
-        shadowColor: '#3880FF',
+        shadowColor: '#590194',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 6,
+    },
+    actionButtonSubmitted: {
+        backgroundColor: '#A78BDA',
+        elevation: 0,
+        shadowOpacity: 0,
     },
     actionButtonText: {
         color: '#fff',
         fontSize: 20,
         fontWeight: '800',
         letterSpacing: 0.5,
+        fontFamily: 'LeagueSpartan_800ExtraBold',
     },
 });

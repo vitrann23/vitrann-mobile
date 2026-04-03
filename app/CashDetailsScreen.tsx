@@ -285,8 +285,9 @@ const styles = StyleSheet.create({
   introTitle: {
     fontSize: 26,
     fontWeight: "800",
-    color: "#007AFF",
+    color: "#590194",
     textAlign: "center",
+    fontFamily: "LeagueSpartan_800ExtraBold",
   },
   mainCard: {
     backgroundColor: "#FFFFFF",
@@ -379,10 +380,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#3C81F6",
-    shadowColor: "#000",
+    backgroundColor: "#590194",
+    shadowColor: "#590194",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 5,
     elevation: 4,
   },
@@ -393,5 +394,6 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 24,
     fontWeight: "800",
+    fontFamily: "LeagueSpartan_800ExtraBold",
   },
 })

@@ -203,7 +203,7 @@ export default function DailySummaryScreen() {
     return (
       <SafeAreaView style={styles.pageBackground}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#297BF6" />
+          <ActivityIndicator size="large" color="#590194" />
           <Text style={styles.loadingText}>Loading daily summary...</Text>
         </View>
       </SafeAreaView>
@@ -228,15 +228,6 @@ export default function DailySummaryScreen() {
     <SafeAreaView style={styles.pageBackground}>
       <ScrollView contentContainerStyle={styles.wrapper}>
         <Text style={styles.heading}>Summary</Text>
-
-        <TouchableOpacity
-          style={styles.previewBtn}
-          onPress={() => {
-            router.push('/DetailedPreviewScreen')
-          }}
-        >
-          <Text style={styles.previewBtnText}>Preview</Text>
-        </TouchableOpacity>
 
         {/* Stock Details Table - 4 Columns */}
         <View style={styles.section}>
@@ -304,6 +295,14 @@ export default function DailySummaryScreen() {
           </View>
         </View>
 
+        <TouchableOpacity
+          style={styles.previewBtn}
+          onPress={() => {
+            router.push('/DetailedPreviewScreen')
+          }}
+        >
+          <Text style={styles.previewBtnText}>Preview</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={[
@@ -368,7 +367,7 @@ const styles = StyleSheet.create({
   },
 
   retryButton: {
-    backgroundColor: "#297BF6",
+    backgroundColor: "#590194",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -390,11 +389,12 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 36,
     fontWeight: '700',
-    color: '#0C6CDE',
+    color: '#590194',
     marginTop: 20,
     marginBottom: 15,
     textAlign: 'center',
     lineHeight: 47,
+    fontFamily: 'LeagueSpartan_700Bold',
   },
 
   section: {
@@ -410,8 +410,9 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#0C6CDE',
+    color: '#590194',
     lineHeight: 31,
+    fontFamily: 'LeagueSpartan_600SemiBold',
   },
   table: {
     backgroundColor: '#fff',
@@ -506,18 +507,20 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   previewBtn: {
-    backgroundColor: '#0C6CDE',
+    backgroundColor: '#590194',
     borderRadius: 7.86,
     width: 150,
     height: 37,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 12, // Offset to the left as requested
+    alignSelf: 'center',
     marginBottom: 15,
+    marginTop: 10,
   },
   previewBtnText: {
     color: '#fff',
     fontWeight: '800',
     fontSize: 16,
+    fontFamily: 'LeagueSpartan_800ExtraBold',
   },
 })
