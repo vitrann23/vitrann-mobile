@@ -2,7 +2,6 @@
   "expo": {
     "name": "वितरण",
     "slug": "MyDiaryApp",
-    "owner": "jhalak_09",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -44,8 +43,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "7b286b74-4544-49d7-85e7-1b169006119e"
+        "projectId": "58563217-b0d8-4047-a9ff-250c1ff1ffb9"
       }
-    }
+    },
+    "owner": "vidhan21"
   }
 }

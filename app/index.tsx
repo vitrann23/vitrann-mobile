@@ -2,8 +2,8 @@
 
 import { Ionicons } from "@expo/vector-icons"
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import * as SecureStore from 'expo-secure-store'
 import { useRouter } from "expo-router"
+import * as SecureStore from 'expo-secure-store'
 import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
@@ -11,13 +11,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
-  ScrollView
+  View
 } from "react-native"
 import Toast from 'react-native-toast-message'
 import apiClient from '../services/apiClient'
@@ -145,12 +145,12 @@ export default function Index() {
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.logoContainer}>
             <Image
-              source={require('../assets/images/logo.png')}
+              source={require('../assets/images/logo-vitran-primary.png')}
               style={styles.logo}
               resizeMode="contain"
             />
           </View>
-          
+
           <Text style={styles.title}>Welcome to Vitaran App</Text>
 
           <View style={styles.formContainer}>

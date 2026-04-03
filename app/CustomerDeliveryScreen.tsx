@@ -871,30 +871,35 @@ export default function CustomerDeliveryScreen() {
           decelerationRate="fast"
           keyExtractor={(item) => item.id}
           initialScrollIndex={0}
-          renderItem={({ item, index }) => (
-            <TouchableOpacity
-              style={[
-                styles.tab,
-                selectedIdx === index && {
-                  backgroundColor: "#3880FF",
-                },
-                item.deliveryConfirmed && styles.confirmedTab,
-                index > selectedIdx && { backgroundColor: "#CAC4D0" },
-              ]}
-              onPress={() => handleTabPress(index)}
-            >
-              <Text
+          renderItem={({ item, index }) => {
+            const isSelected = selectedIdx === index;
+            const isConfirmed = item.deliveryConfirmed;
+            const isFuture = index > selectedIdx;
+
+            return (
+              <TouchableOpacity
                 style={[
-                  styles.tabText,
-                  selectedIdx === index && styles.activeTabText,
-                  item.deliveryConfirmed && styles.confirmedTabText,
-                  index !== selectedIdx && { color: "#fff" },
+                  styles.tab,
+                  isConfirmed && styles.confirmedTab,
+                  isSelected && styles.activeTab,
+                  isSelected && isConfirmed && styles.activeConfirmedTab,
+                  isFuture && styles.futureTab,
                 ]}
+                onPress={() => handleTabPress(index)}
               >
-                {item.name}
-              </Text>
-            </TouchableOpacity>
-          )}
+                <Text
+                  style={[
+                    styles.tabText,
+                    isSelected && styles.activeTabText,
+                    isConfirmed && !isSelected && styles.confirmedTabText,
+                    isFuture && { color: "#94A3B8" }, // Faded gray for future
+                  ]}
+                >
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
         />
       </View>
 
@@ -1455,41 +1460,64 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   tabs: {
-    paddingLeft: 0,
+    paddingLeft: 4,
+    paddingRight: 10,
   },
   tab: {
-    width: TAB_WIDTH,
-    paddingVertical: 15,
-    borderRadius: 10,
+    minWidth: 120,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
     marginLeft: 10,
-    marginRight: 10,
-    backgroundColor: "#80AEFF",
+    backgroundColor: "#FFFFFF", // White background for clean look
     alignItems: "center",
     justifyContent: "center",
-    borderRightWidth: 1,
-    borderRightColor: "#F0F0F0",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0", // Subtle border
   },
   activeTab: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: "#3B82F6", // Professional Blue
+    borderColor: "#2563EB",
+    transform: [{ scale: 1.05 }],
+    shadowColor: "#3B82F6",
+    shadowOpacity: 0.4,
   },
   confirmedTab: {
-    backgroundColor: theme.colors.successLight,
-    borderColor: theme.colors.success,
-    borderWidth: 1,
+    backgroundColor: "#DCFCE7", // Light Green
+    borderColor: "#10B981", // Success Green
+  },
+  activeConfirmedTab: {
+    backgroundColor: "#10B981", // Solid Green when selected
+    borderColor: "#059669",
+    transform: [{ scale: 1.05 }],
+    shadowColor: "#10B981",
+    shadowOpacity: 0.4,
+  },
+  futureTab: {
+    backgroundColor: "#F8FAFC",
+    opacity: 0.6,
+    elevation: 0,
+    shadowOpacity: 0,
+    borderColor: "#F1F5F9",
   },
   tabText: {
-    color: theme.colors.tabInactiveText,
-    fontWeight: theme.font.weight.medium,
-    fontSize: theme.font.size.md,
+    color: "#475569", // Slate gray for readability
+    fontWeight: "600",
+    fontSize: 15,
     textAlign: "center",
   },
   activeTabText: {
-    color: theme.colors.textOnPrimary,
-    fontWeight: theme.font.weight.bold,
+    color: "#FFFFFF",
+    fontWeight: "800",
   },
   confirmedTabText: {
-    color: theme.colors.successDark,
-    fontWeight: theme.font.weight.bold,
+    color: "#047857", // Dark emerald for contrast
+    fontWeight: "700",
   },
 
   card: {
