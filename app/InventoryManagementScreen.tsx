@@ -20,6 +20,7 @@ import Toast from 'react-native-toast-message';
 import apiClient from '../services/apiClient';
 import { useInventory } from '../hooks/useInventory';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getProductImageSource } from '../utils/productImages';
 
 // Mock Data
 // Product Interface
@@ -116,7 +117,7 @@ export default function InventoryManagementScreen() {
     }, []);
 
     const filteredProducts = useMemo(() => {
-        return products;
+        return [...products].sort((a, b) => a.productId - b.productId);
     }, [products]);
 
     const handleQtyChange = (productId: number, qty: string) => {
@@ -351,7 +352,19 @@ export default function InventoryManagementScreen() {
                             {filteredProducts.map((product, idx) => (
                                 <View key={product.productId} style={styles.productCard}>
                                     <View style={styles.productLeft}>
-                                        <Image source={{ uri: product.imageUrl }} style={styles.productImage} />
+                                        {(() => {
+                                            const imgSrc = getProductImageSource({
+                                                productName: product.productName,
+                                                imageUrl: product.imageUrl,
+                                            });
+                                            return imgSrc ? (
+                                                <Image source={imgSrc} style={styles.productImage} resizeMode="contain" />
+                                            ) : (
+                                                <View style={[styles.productImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 6 }]}>
+                                                    <Ionicons name="cube-outline" size={30} color="#CBD5E1" />
+                                                </View>
+                                            );
+                                        })()}
                                         <View style={styles.productInfo}>
                                             <Text style={styles.productName}>{product.productName}</Text>
                                             <Text style={styles.availabilityText}>
