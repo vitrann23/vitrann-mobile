@@ -13,6 +13,7 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -61,11 +62,11 @@ export default function CustomerDeliveryScreen() {
   const markAsPaid = (customerId: number) => {
     setCustomers((prev) => {
       const updated = prev.map((c) =>
-        c.customerId === customerId ? { ...c, isPaid: true } : c
+        c.customerId === customerId ? { ...c, isPaid: true } : c,
       );
       // Persist to local storage
       AsyncStorage.setItem("offline_customers", JSON.stringify(updated)).catch(
-        (err) => console.error("Failed to save offline_customers", err)
+        (err) => console.error("Failed to save offline_customers", err),
       );
       return updated;
     });
@@ -88,9 +89,10 @@ export default function CustomerDeliveryScreen() {
   const [associatedProductQuantities, setAssociatedProductQuantities] =
     useState<Record<string, string>>({});
   const [productDeliveryModal, setProductDeliveryModal] = useState(false); // For modal visibility
-  const [menuVisible, setMenuVisible] = useState(false); // For hamburger menu
-  const [paymentAmount, setPaymentAmount] = useState(""); // For B2B payment input
-  const [currentWorkerName, setCurrentWorkerName] = useState(""); // Local worker name storage
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [currentWorkerName, setCurrentWorkerName] = useState("");
+  const [confirmationVisible, setConfirmationVisible] = useState(false);
 
   // Refs for tabs
   const tabListRef = useRef<FlatList>(null);
@@ -145,6 +147,24 @@ export default function CustomerDeliveryScreen() {
       if (name) setCurrentWorkerName(name);
     };
     getWorkerName();
+  }, []);
+
+  // Persist associatedProductQuantities so they survive navigation
+  useEffect(() => {
+    if (Object.keys(associatedProductQuantities).length === 0) return;
+    AsyncStorage.setItem(
+      `assoc_qty_${workerIdParam}`,
+      JSON.stringify(associatedProductQuantities),
+    ).catch(() => {});
+  }, [associatedProductQuantities]);
+
+  // Restore associatedProductQuantities on mount
+  useEffect(() => {
+    AsyncStorage.getItem(`assoc_qty_${workerIdParam}`)
+      .then((val) => {
+        if (val) setAssociatedProductQuantities(JSON.parse(val));
+      })
+      .catch(() => {});
   }, []);
 
   const handleTabPress = (index: number) => {
@@ -214,7 +234,7 @@ export default function CustomerDeliveryScreen() {
         if (item.qty < 0 || billAmount <= 0) {
           Alert.alert(
             "Invalid Entry",
-            `Delivery quantity must be >= 0 and bill amount must be > 0 for ${item.name}.`
+            `Delivery quantity must be >= 0 and bill amount must be > 0 for ${item.name}.`,
           );
           setProcessingDelivery(false);
           return;
@@ -255,22 +275,21 @@ export default function CustomerDeliveryScreen() {
       }
 
       if (allSuccessful) {
-        Toast.show({
-          type: "success",
-          text1: "Delivery Confirmed",
-          text2: "All items submitted successfully",
-        });
+        setConfirmationVisible(true);
+        setTimeout(() => setConfirmationVisible(false), 1000);
       } else if (anySuccessful) {
         Toast.show({
           type: "info",
           text1: "Partial Success",
           text2: "Some items saved offline",
+          visibilityTime: 2000,
         });
       } else {
         Toast.show({
           type: "info",
           text1: "Saved Offline",
           text2: "Delivery queued for sync",
+          visibilityTime: 2000,
         });
       }
 
@@ -316,6 +335,7 @@ export default function CustomerDeliveryScreen() {
         type: "error",
         text1: "Error",
         text2: "Failed to save delivery",
+        visibilityTime: 2000,
       });
     } finally {
       setProcessingDelivery(false);
@@ -336,7 +356,11 @@ export default function CustomerDeliveryScreen() {
         (item) => item.productId === product.productId,
       )
     ) {
-      Toast.show({ type: "info", text1: "Item already added" });
+      Toast.show({
+        type: "info",
+        text1: "Item already added",
+        visibilityTime: 1500,
+      });
       return;
     }
 
@@ -416,7 +440,11 @@ export default function CustomerDeliveryScreen() {
         (item) => item.productId === product.productId,
       )
     ) {
-      Toast.show({ type: "info", text1: "Item already added" });
+      Toast.show({
+        type: "info",
+        text1: "Item already added",
+        visibilityTime: 2000,
+      });
       return;
     }
 
@@ -440,6 +468,7 @@ export default function CustomerDeliveryScreen() {
         type: "error",
         text1: "Out of Stock",
         text2: `${product.productName} is out of stock`,
+        visibilityTime: 2000,
       });
       return;
     }
@@ -450,6 +479,7 @@ export default function CustomerDeliveryScreen() {
         type: "error",
         text1: "Not Enough Stock",
         text2: `Only ${availableForThisProduct} available`,
+        visibilityTime: 2000,
       });
       return;
     }
@@ -532,6 +562,7 @@ export default function CustomerDeliveryScreen() {
         type: "error",
         text1: "Not Enough Stock",
         text2: `Only ${maxAvailable} available`,
+        visibilityTime: 2000,
       });
       return;
     }
@@ -563,7 +594,7 @@ export default function CustomerDeliveryScreen() {
       deliveredItems: updatedItems,
     };
     setCustomers(updatedCustomers);
-    Toast.show({ type: "info", text1: "Item Removed" });
+    Toast.show({ type: "info", text1: "Item Removed", visibilityTime: 2000 });
   };
 
   const confirmDelivery = async () => {
@@ -646,7 +677,7 @@ export default function CustomerDeliveryScreen() {
 
     if (finalItemsToDeliver.length === 0) {
       if (selectedIdx < customers.length - 1) {
-        Toast.show({ type: "info", text1: "Skipping" });
+        Toast.show({ type: "info", text1: "Skipping", visibilityTime: 2000 });
         setSelectedIdx(selectedIdx + 1);
       } else {
         // Last customer - navigate to cash details anyway?
@@ -773,12 +804,20 @@ export default function CustomerDeliveryScreen() {
   const totalPayment = calculateTotalPaymentWithAssociated();
 
   const associatedProducts = getAssociatedProducts();
+  // Deduplicate: remove associated items already present in deliveredItems
+  const deliveredProductIds = new Set(
+    customer.deliveredItems.map((i) => i.productId),
+  );
   const allProducts = [
-    ...associatedProducts.map((inv) => ({
-      type: "associated",
-      inventoryItem: inv,
-      deliveredItem: null,
-    })),
+    ...associatedProducts
+      .filter(
+        (inv) => !deliveredProductIds.has(inv.inventory?.product?.productId),
+      )
+      .map((inv) => ({
+        type: "associated",
+        inventoryItem: inv,
+        deliveredItem: null,
+      })),
     ...customer.deliveredItems.map((item) => ({
       type: "delivered",
       inventoryItem: null,
@@ -795,7 +834,11 @@ export default function CustomerDeliveryScreen() {
         <TouchableOpacity
           style={styles.skipButton}
           onPress={() => {
-            Toast.show({ type: "info", text1: "Skipping Delivery" });
+            Toast.show({
+              type: "info",
+              text1: "Skipping Delivery",
+              visibilityTime: 1500,
+            });
             if (selectedIdx < customers.length - 1) {
               setSelectedIdx(selectedIdx + 1);
             }
@@ -948,10 +991,10 @@ export default function CustomerDeliveryScreen() {
                   const product = isAssociated
                     ? inventoryItem?.inventory?.product
                     : inventory?.find(
-                      (inv) =>
-                        inv.inventory?.product.productId ===
-                        deliveredItem?.productId,
-                    )?.inventory?.product;
+                        (inv) =>
+                          inv.inventory?.product.productId ===
+                          deliveredItem?.productId,
+                      )?.inventory?.product;
                   if (!product) return null;
                   const inventoryItemForProduct = inventory?.find(
                     (inv) =>
@@ -975,12 +1018,12 @@ export default function CustomerDeliveryScreen() {
                   const currentCustomerDeliveredExcludingCurrent = isAssociated
                     ? 0 // Associated products aren't in deliveredItems yet
                     : customer.deliveredItems
-                      .filter(
-                        (i) =>
-                          i.productId === product.productId &&
-                          i !== deliveredItem, // Exclude the current item being edited
-                      )
-                      .reduce((sum, i) => sum + i.qty, 0);
+                        .filter(
+                          (i) =>
+                            i.productId === product.productId &&
+                            i !== deliveredItem, // Exclude the current item being edited
+                        )
+                        .reduce((sum, i) => sum + i.qty, 0);
 
                   const baseQty =
                     inventoryItemForProduct?.availableQuantity ??
@@ -989,16 +1032,16 @@ export default function CustomerDeliveryScreen() {
                   const availableQty = Math.max(
                     0,
                     baseQty -
-                    totalDeliveredByOthers -
-                    currentCustomerDeliveredExcludingCurrent,
+                      totalDeliveredByOthers -
+                      currentCustomerDeliveredExcludingCurrent,
                   );
                   const associatedQty = isAssociated
                     ? customerProductRelations.find(
-                      (rel) =>
-                        rel.customerId === customer.customerId &&
-                        rel.productId === product.productId &&
-                        rel.thruDate === null,
-                    )?.quantityAssociated || 0
+                        (rel) =>
+                          rel.customerId === customer.customerId &&
+                          rel.productId === product.productId &&
+                          rel.thruDate === null,
+                      )?.quantityAssociated || 0
                     : 0;
                   const quantityKey = `${customer.customerId}-${product.productId}`;
                   const defaultValue = isB2B
@@ -1011,9 +1054,9 @@ export default function CustomerDeliveryScreen() {
                     : deliveredItem?.qty.toString();
                   const priceValue = isAssociated
                     ? (
-                      customer.associatedProductPrices?.[product.productId]
-                        ?.price || Number(product.currentProductPrice)
-                    ).toString()
+                        customer.associatedProductPrices?.[product.productId]
+                          ?.price || Number(product.currentProductPrice)
+                      ).toString()
                     : deliveredItem?.price.toString();
                   const isAlreadyAdded = customer.deliveredItems.some(
                     (d) => d.productId === product.productId,
@@ -1180,9 +1223,17 @@ export default function CustomerDeliveryScreen() {
                   <TouchableOpacity
                     style={[
                       styles.collectButton,
-                      (totalPayment === 0 || customer.isPaid || customer.deliveryConfirmed) && { backgroundColor: '#E2E8F0' },
+                      (totalPayment === 0 ||
+                        customer.isPaid ||
+                        customer.deliveryConfirmed) && {
+                        backgroundColor: "#E2E8F0",
+                      },
                     ]}
-                    disabled={totalPayment === 0 || customer.isPaid || customer.deliveryConfirmed}
+                    disabled={
+                      totalPayment === 0 ||
+                      customer.isPaid ||
+                      customer.deliveryConfirmed
+                    }
                     onPress={async () => {
                       if (!customer || customer.isPaid || totalPayment <= 0)
                         return;
@@ -1201,11 +1252,16 @@ export default function CustomerDeliveryScreen() {
                           },
                         )) as any;
 
-                        if (response.id || response.customerId || response.success) {
+                        if (
+                          response.id ||
+                          response.customerId ||
+                          response.success
+                        ) {
                           Toast.show({
                             type: "success",
                             text1: "Payment Collected",
                             text2: `₹${amount} recorded`,
+                            visibilityTime: 1500,
                           });
                         } else {
                           throw new Error("API reported failure");
@@ -1217,15 +1273,22 @@ export default function CustomerDeliveryScreen() {
                           type: "info",
                           text1: "Payment Saved",
                           text2: "Payment will sync when online",
+                          visibilityTime: 2000,
                         });
                       }
                     }}
                   >
-                    <Text style={[
-                      styles.collectButtonText,
-                      (customer.isPaid || customer.deliveryConfirmed) && { color: '#94A3B8' }
-                    ]}>
-                      {(customer.isPaid || customer.deliveryConfirmed) ? "Collected" : "Collect"}
+                    <Text
+                      style={[
+                        styles.collectButtonText,
+                        (customer.isPaid || customer.deliveryConfirmed) && {
+                          color: "#94A3B8",
+                        },
+                      ]}
+                    >
+                      {customer.isPaid || customer.deliveryConfirmed
+                        ? "Collected"
+                        : "Collect"}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -1267,6 +1330,25 @@ export default function CustomerDeliveryScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Green checkmark confirmation overlay */}
+      <Modal
+        transparent
+        animationType="fade"
+        visible={confirmationVisible}
+        onRequestClose={() => setConfirmationVisible(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "rgba(0,0,0,0.25)",
+          }}
+        >
+          <Ionicons name="checkmark-circle" size={120} color="#22C55E" />
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

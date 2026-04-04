@@ -66,6 +66,10 @@ const MorningStockScreen = () => {
 
   const fetchData = useCallback(
     async (isRefresh = false) => {
+      if (!workerId) {
+        router.replace("/");
+        return;
+      }
       console.log("Fetching products for workerId:", workerId);
       if (!isRefresh) setLoading(true);
       else setRefreshing(true);
@@ -76,17 +80,24 @@ const MorningStockScreen = () => {
 
         // Preemptive check: If the user already submitted cash today, route them directly to the EntriesSubmitted UI
         try {
-          const cashResponse = (await apiClient.get("/deliveries/total-amount")) as any;
-          if (cashResponse?.success && cashResponse?.data?.amount !== undefined) {
-             router.replace({
-               pathname: "/EntriesSubmitted" as any,
-               params: { amount: cashResponse.data.amount }
-             });
-             return; // Stop loading products
+          const cashResponse = (await apiClient.get(
+            "/deliveries/total-amount",
+          )) as any;
+          if (
+            cashResponse?.success &&
+            cashResponse?.data?.amount !== undefined
+          ) {
+            router.replace({
+              pathname: "/EntriesSubmitted" as any,
+              params: { amount: cashResponse.data.amount },
+            });
+            return; // Stop loading products
           }
         } catch (err) {
           // If no entry exists or API returns an error, we just proceed normally
-          console.log("No existing daily entry found, proceeding to load products.");
+          console.log(
+            "No existing daily entry found, proceeding to load products.",
+          );
         }
 
         const response = (await apiClient.get(
@@ -94,9 +105,9 @@ const MorningStockScreen = () => {
         )) as any;
         const result = response;
         if (result.success && Array.isArray(result.data)) {
-          const validProducts = result.data.filter(
-            (p: Product) => p && p.inventory && p.inventory.inventoryId,
-          ).sort((a: Product, b: Product) => a.productId - b.productId);
+          const validProducts = result.data
+            .filter((p: Product) => p && p.inventory && p.inventory.inventoryId)
+            .sort((a: Product, b: Product) => a.productId - b.productId);
           setProducts(validProducts);
 
           if (!isRefresh) {
@@ -111,10 +122,23 @@ const MorningStockScreen = () => {
             type: "error",
             text1: "Error",
             text2: "Failed to load products",
+            visibilityTime: 2000,
           });
         }
       } catch (error) {
-        Toast.show({ type: "error", text1: "Error", text2: "Network error" });
+        if (
+          (error as any)?.status === 401 ||
+          (error as any)?.response?.status === 401
+        ) {
+          router.replace("/");
+          return;
+        }
+        Toast.show({
+          type: "error",
+          text1: "Error",
+          text2: "Network error",
+          visibilityTime: 2000,
+        });
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -157,6 +181,7 @@ const MorningStockScreen = () => {
         type: "error",
         text1: "Error",
         text2: "Please enter quantity.",
+        visibilityTime: 2000,
       });
       return;
     }
@@ -182,6 +207,7 @@ const MorningStockScreen = () => {
           type: "success",
           text1: "Success",
           text2: "Stock submitted!",
+          visibilityTime: 2000,
         });
         setTimeout(() => {
           router.push({
