@@ -1,202 +1,205 @@
-"use client"
+"use client";
 
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import * as SecureStore from 'expo-secure-store'
-import Constants from 'expo-constants'
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback, useEffect, useState } from 'react'
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
+import Constants from "expo-constants";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import Toast from 'react-native-toast-message'
-import apiClient from '../services/apiClient'
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import Toast from "react-native-toast-message";
+import apiClient from "../services/apiClient";
 
 // Types
-type ProductSummary = { [name: string]: number }
+type ProductSummary = { [name: string]: number };
 
 type InventoryItem = {
-  id: number
-  workerId: number
-  inventoryId: number
-  totalPickedQuantity: number | null
-  remainingQuantity: number | null
-  date: string
+  id: number;
+  workerId: number;
+  inventoryId: number;
+  totalPickedQuantity: number | null;
+  remainingQuantity: number | null;
+  date: string;
   inventory: {
-    inventoryId: number
-    totalOrderedQuantity: number
-    receivedQuantity: number | null
-    remainingQuantity: number | null
-    date: string
+    inventoryId: number;
+    totalOrderedQuantity: number;
+    receivedQuantity: number | null;
+    remainingQuantity: number | null;
+    date: string;
     product: {
-      productId: number
-      productName: string
-      currentProductPrice: number
-      storeId: string
-      imageUrl: string | null
-      description: string | null
-    }
-  }
-}
+      productId: number;
+      productName: string;
+      currentProductPrice: number;
+      storeId: string;
+      imageUrl: string | null;
+      description: string | null;
+    };
+  };
+};
 
 // ✅ UPDATED: Single cash record structure based on backend response
 type CashRecord = {
-  id: number
-  workerId: number
-  date: string
-  amount: number
-}
+  id: number;
+  workerId: number;
+  date: string;
+  amount: number;
+};
 
 type StockDetail = {
-  productName: string
-  totalStock: number
-  deliveredStock: number
-  variance: number
-}
+  productName: string;
+  totalStock: number;
+  deliveredStock: number;
+  variance: number;
+};
 
 type SummaryData = {
-  totalProducts: number
-  totalPickedQuantity: number
-  totalRemainingQuantity: number
-  completedProducts: number
-  pendingProducts: number
-  totalValue: number
-  paymentFromCustomer: number
-  stockDetails: StockDetail[]
-}
-
-
+  totalProducts: number;
+  totalPickedQuantity: number;
+  totalRemainingQuantity: number;
+  completedProducts: number;
+  pendingProducts: number;
+  totalValue: number;
+  paymentFromCustomer: number;
+  stockDetails: StockDetail[];
+};
 
 // Helper functions removed as they are no longer used by the Table UI
 
 export default function DailySummaryScreen() {
-  const params = useLocalSearchParams()
-  const router = useRouter()
+  const params = useLocalSearchParams();
+  const router = useRouter();
 
   // State management
-  const [inventoryData, setInventoryData] = useState<InventoryItem[]>([])
-  const [summaryData, setSummaryData] = useState<SummaryData | null>(null)
-  const [cashRecord, setCashRecord] = useState<CashRecord | null>(null) // ✅ UPDATED: Single cash record
-  const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [inventoryData, setInventoryData] = useState<InventoryItem[]>([]);
+  const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
+  const [cashRecord, setCashRecord] = useState<CashRecord | null>(null); // ✅ UPDATED: Single cash record
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Parse remaining quantities from params
-  const remainingFromParams: ProductSummary = params.remaining ? JSON.parse(params.remaining as string) : {}
+  const remainingFromParams: ProductSummary = params.remaining
+    ? JSON.parse(params.remaining as string)
+    : {};
 
   // Refresh data whenever screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      fetchAllData()
-    }, [])
-  )
+      fetchAllData();
+    }, []),
+  );
 
   const fetchAllData = async () => {
     try {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
 
       // Fetch both summary and cash data simultaneously
-      const [summaryResponse, cashResponse] = await Promise.all([
-        apiClient.get('/daily-activity-ci/my-inventory-summary'),
-        apiClient.get('/deliveries/total-amount')
-      ]) as any[]
+      const [summaryResponse, cashResponse] = (await Promise.all([
+        apiClient.get("/daily-activity-ci/my-inventory-summary"),
+        apiClient.get("/deliveries/total-amount"),
+      ])) as any[];
 
       // Process summary data
       if (summaryResponse.success && summaryResponse.data) {
-        setSummaryData(summaryResponse.data)
+        setSummaryData(summaryResponse.data);
       }
 
       // Process cash record
       if (cashResponse.success && cashResponse.data) {
-        setCashRecord(cashResponse.data)
+        setCashRecord(cashResponse.data);
       } else {
-        setCashRecord(null)
+        setCashRecord(null);
       }
 
       Toast.show({
-        type: 'success',
-        text1: 'Data Loaded',
-        text2: 'Summary data loaded successfully',
+        type: "success",
+        text1: "Data Loaded",
+        text2: "Summary data loaded successfully",
         visibilityTime: 2000,
-      })
-
+      });
     } catch (error) {
-      console.error('Error fetching summary data:', error)
-      setError('Failed to load summary data')
+      console.error("Error fetching summary data:", error);
+      setError("Failed to load summary data");
 
       Toast.show({
-        type: 'error',
-        text1: 'Loading Failed',
-        text2: 'Unable to load summary data',
+        type: "error",
+        text1: "Loading Failed",
+        text2: "Unable to load summary data",
         visibilityTime: 3000,
-      })
+      });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleLogout = async () => {
     try {
-      await SecureStore.deleteItemAsync('authToken');
-      await AsyncStorage.multiRemove(['workerId', 'workerName', 'userType']);
-      router.replace('/');
+      await SecureStore.deleteItemAsync("authToken");
+      await AsyncStorage.multiRemove(["workerId", "workerName", "userType"]);
+      router.replace("/");
       Toast.show({
-        type: 'success',
-        text1: 'Logged Out',
-        text2: 'Session cleared successfully',
+        type: "success",
+        text1: "Logged Out",
+        text2: "Session cleared successfully",
+        visibilityTime: 1500,
       });
     } catch (e) {
-      console.error('Logout failed', e);
+      console.error("Logout failed", e);
       Toast.show({
-        type: 'error',
-        text1: 'Logout Failed',
-        text2: 'Please try again',
+        type: "error",
+        text1: "Logout Failed",
+        text2: "Please try again",
+        visibilityTime: 2000,
       });
     }
   };
 
   const submitDailySummary = async () => {
-    setSubmitting(true)
+    setSubmitting(true);
 
     try {
       // Logic: Tell backend to save the calculated variances
-      const response = await apiClient.post('/daily-activity-ci/submit-summary', {}) as any
+      const response = (await apiClient.post(
+        "/daily-activity-ci/submit-summary",
+        {},
+      )) as any;
 
       if (response.success) {
         Toast.show({
-          type: 'success',
-          text1: 'Summary Submitted',
-          text2: 'Stock remaining quantities saved successfully',
+          type: "success",
+          text1: "Summary Submitted",
+          text2: "Stock remaining quantities saved successfully",
           visibilityTime: 3000,
-        })
+        });
 
         // Navigate to home or login screen
         setTimeout(() => {
-          router.replace('/')
-        }, 2000)
+          router.replace("/");
+        }, 2000);
       } else {
-        throw new Error(response.message || 'Failed to submit summary')
+        throw new Error(response.message || "Failed to submit summary");
       }
-
     } catch (error: any) {
-      console.error('Error submitting summary:', error)
+      console.error("Error submitting summary:", error);
 
       Toast.show({
-        type: 'error',
-        text1: 'Submission Failed',
-        text2: error.message || 'Unable to submit daily summary',
+        type: "error",
+        text1: "Submission Failed",
+        text2: error.message || "Unable to submit daily summary",
         visibilityTime: 3000,
-      })
+      });
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
 
   // Loading screen
   if (loading) {
@@ -207,7 +210,7 @@ export default function DailySummaryScreen() {
           <Text style={styles.loadingText}>Loading daily summary...</Text>
         </View>
       </SafeAreaView>
-    )
+    );
   }
 
   // Error screen
@@ -221,7 +224,7 @@ export default function DailySummaryScreen() {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
-    )
+    );
   }
 
   return (
@@ -237,16 +240,44 @@ export default function DailySummaryScreen() {
           <View style={styles.table}>
             <View style={[styles.tableHeader, styles.stockTableHeader]}>
               <Text style={[styles.columnHeader, { flex: 2 }]}>Product</Text>
-              <Text style={[styles.columnHeader, { flex: 1, textAlign: 'center' }]}>Total</Text>
-              <Text style={[styles.columnHeader, { flex: 1, textAlign: 'center' }]}>Deliv.</Text>
-              <Text style={[styles.columnHeader, { flex: 1, textAlign: 'right' }]}>Var.</Text>
+              <Text
+                style={[styles.columnHeader, { flex: 1, textAlign: "center" }]}
+              >
+                Total
+              </Text>
+              <Text
+                style={[styles.columnHeader, { flex: 1, textAlign: "center" }]}
+              >
+                Deliv.
+              </Text>
+              <Text
+                style={[styles.columnHeader, { flex: 1, textAlign: "right" }]}
+              >
+                Var.
+              </Text>
             </View>
             {summaryData?.stockDetails.map((item, index) => (
               <View key={index} style={styles.tableRow}>
-                <Text style={[styles.cell, { flex: 2 }]}>{item.productName}</Text>
-                <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>{item.totalStock}</Text>
-                <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>{item.deliveredStock}</Text>
-                <Text style={[styles.cell, { flex: 1, textAlign: 'right', fontWeight: '700', color: item.variance !== 0 ? '#EF4444' : '#16A34A' }]}>
+                <Text style={[styles.cell, { flex: 2 }]}>
+                  {item.productName}
+                </Text>
+                <Text style={[styles.cell, { flex: 1, textAlign: "center" }]}>
+                  {item.totalStock}
+                </Text>
+                <Text style={[styles.cell, { flex: 1, textAlign: "center" }]}>
+                  {item.deliveredStock}
+                </Text>
+                <Text
+                  style={[
+                    styles.cell,
+                    {
+                      flex: 1,
+                      textAlign: "right",
+                      fontWeight: "700",
+                      color: item.variance !== 0 ? "#EF4444" : "#16A34A",
+                    },
+                  ]}
+                >
                   {item.variance}
                 </Text>
               </View>
@@ -265,31 +296,95 @@ export default function DailySummaryScreen() {
           <View style={styles.table}>
             <View style={[styles.tableHeader, styles.paymentTableHeader]}>
               <Text style={[styles.columnHeader, { flex: 2 }]}>Detail</Text>
-              <Text style={[styles.columnHeader, { flex: 1.5, textAlign: 'right' }]}>Amount (₹)</Text>
-              <Text style={[styles.columnHeader, { flex: 1, textAlign: 'right' }]}>Var.</Text>
+              <Text
+                style={[styles.columnHeader, { flex: 1.5, textAlign: "right" }]}
+              >
+                Amount (₹)
+              </Text>
+              <Text
+                style={[styles.columnHeader, { flex: 1, textAlign: "right" }]}
+              >
+                Var.
+              </Text>
             </View>
 
             <View style={styles.tableRow}>
               <Text style={[styles.cell, { flex: 2 }]}>From Customer</Text>
-              <Text style={[styles.cell, { flex: 1.5, textAlign: 'right' }]}>
-                {summaryData?.paymentFromCustomer.toLocaleString('en-IN') || '0'}
+              <Text style={[styles.cell, { flex: 1.5, textAlign: "right" }]}>
+                {summaryData?.paymentFromCustomer.toLocaleString("en-IN") ||
+                  "0"}
               </Text>
-              <Text style={[styles.cell, { flex: 1, textAlign: 'right', color: '#94A3B8' }]}>-</Text>
+              <Text
+                style={[
+                  styles.cell,
+                  { flex: 1, textAlign: "right", color: "#94A3B8" },
+                ]}
+              >
+                -
+              </Text>
             </View>
 
             <View style={styles.tableRow}>
-              <Text style={[styles.cell, { flex: 2 }]}>In Hand (Submitted)</Text>
-              <Text style={[styles.cell, { flex: 1.5, textAlign: 'right' }]}>
-                {cashRecord?.amount.toLocaleString('en-IN') || '0'}
+              <Text style={[styles.cell, { flex: 2 }]}>
+                In Hand (Submitted)
               </Text>
-              <Text style={[styles.cell, { flex: 1, textAlign: 'right', color: '#94A3B8' }]}>-</Text>
+              <Text style={[styles.cell, { flex: 1.5, textAlign: "right" }]}>
+                {cashRecord?.amount.toLocaleString("en-IN") || "0"}
+              </Text>
+              <Text
+                style={[
+                  styles.cell,
+                  { flex: 1, textAlign: "right", color: "#94A3B8" },
+                ]}
+              >
+                -
+              </Text>
             </View>
 
-            <View style={[styles.tableRow, { backgroundColor: '#F8FAFC', borderTopWidth: 2, borderTopColor: '#E2E8F0' }]}>
-              <Text style={[styles.cell, { flex: 2, fontWeight: '800', color: '#1E293B' }]}>Net Variance</Text>
-              <Text style={[styles.cell, { flex: 1.5, textAlign: 'right', color: '#94A3B8' }]}>-</Text>
-              <Text style={[styles.cell, { flex: 1, textAlign: 'right', fontWeight: '900', color: (summaryData?.paymentFromCustomer || 0) - (cashRecord?.amount || 0) !== 0 ? '#EF4444' : '#16A34A' }]}>
-                {(summaryData?.paymentFromCustomer || 0) - (cashRecord?.amount || 0)}
+            <View
+              style={[
+                styles.tableRow,
+                {
+                  backgroundColor: "#F8FAFC",
+                  borderTopWidth: 2,
+                  borderTopColor: "#E2E8F0",
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.cell,
+                  { flex: 2, fontWeight: "800", color: "#1E293B" },
+                ]}
+              >
+                Net Variance
+              </Text>
+              <Text
+                style={[
+                  styles.cell,
+                  { flex: 1.5, textAlign: "right", color: "#94A3B8" },
+                ]}
+              >
+                -
+              </Text>
+              <Text
+                style={[
+                  styles.cell,
+                  {
+                    flex: 1,
+                    textAlign: "right",
+                    fontWeight: "900",
+                    color:
+                      (summaryData?.paymentFromCustomer || 0) -
+                        (cashRecord?.amount || 0) !==
+                      0
+                        ? "#EF4444"
+                        : "#16A34A",
+                  },
+                ]}
+              >
+                {(summaryData?.paymentFromCustomer || 0) -
+                  (cashRecord?.amount || 0)}
               </Text>
             </View>
           </View>
@@ -298,22 +393,21 @@ export default function DailySummaryScreen() {
         <TouchableOpacity
           style={styles.previewBtn}
           onPress={() => {
-            router.push('/DetailedPreviewScreen')
+            router.push("/DetailedPreviewScreen");
           }}
         >
           <Text style={styles.previewBtnText}>Preview</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[
-            styles.submitBtn,
-            submitting && styles.submitBtnDisabled
-          ]}
+          style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
           onPress={submitDailySummary}
           disabled={submitting}
         >
           {submitting ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+            >
               <ActivityIndicator color="#fff" size="small" />
               <Text style={styles.submitBtnText}>Submitting...</Text>
             </View>
@@ -322,21 +416,18 @@ export default function DailySummaryScreen() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={handleLogout}
-        >
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutBtnText}>🚪 Logout / Switch Worker</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
   pageBackground: {
     flex: 1,
-    backgroundColor: '#F5F6F9',
+    backgroundColor: "#F5F6F9",
   },
 
   loadingContainer: {
@@ -381,146 +472,146 @@ const styles = StyleSheet.create({
 
   wrapper: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     padding: 18,
-    minHeight: '100%',
+    minHeight: "100%",
   },
 
   heading: {
     fontSize: 36,
-    fontWeight: '700',
-    color: '#590194',
+    fontWeight: "700",
+    color: "#590194",
     marginTop: 20,
     marginBottom: 15,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 47,
-    fontFamily: 'LeagueSpartan_700Bold',
+    fontFamily: "LeagueSpartan_700Bold",
   },
 
   section: {
     marginBottom: 24,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    alignItems: "center",
     marginBottom: 12,
     paddingHorizontal: 12,
   },
   sectionTitle: {
     fontSize: 24,
-    fontWeight: '600',
-    color: '#590194',
+    fontWeight: "600",
+    color: "#590194",
     lineHeight: 31,
-    fontFamily: 'LeagueSpartan_600SemiBold',
+    fontFamily: "LeagueSpartan_600SemiBold",
   },
   table: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: "#E2E8F0",
   },
   tableHeader: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingVertical: 12,
     paddingHorizontal: 16,
   },
   stockTableHeader: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: "#F8FAFC",
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: "#E2E8F0",
   },
   paymentTableHeader: {
-    backgroundColor: '#F0F9FF',
+    backgroundColor: "#F0F9FF",
     borderBottomWidth: 1,
-    borderBottomColor: '#BAE6FD',
+    borderBottomColor: "#BAE6FD",
   },
   columnHeader: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#64748B',
-    textTransform: 'uppercase',
+    fontWeight: "700",
+    color: "#64748B",
+    textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   tableRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    alignItems: 'center',
+    borderBottomColor: "#F1F5F9",
+    alignItems: "center",
   },
   cell: {
     fontSize: 15,
-    color: '#334155',
-    fontWeight: '500',
+    color: "#334155",
+    fontWeight: "500",
   },
   totalBadge: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: "#F1F5F9",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
     fontSize: 12,
-    fontWeight: '700',
-    color: '#475569',
+    fontWeight: "700",
+    color: "#475569",
   },
   noProducts: {
     padding: 24,
-    textAlign: 'center',
-    color: '#94A3B8',
-    fontStyle: 'italic',
+    textAlign: "center",
+    color: "#94A3B8",
+    fontStyle: "italic",
   },
   submitBtn: {
-    backgroundColor: '#17A34C',
+    backgroundColor: "#17A34C",
     borderRadius: 6.77,
     paddingVertical: 18,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 20,
-    width: '100%',
+    width: "100%",
     height: 65,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   submitBtnDisabled: {
-    backgroundColor: '#94A3B8',
+    backgroundColor: "#94A3B8",
   },
   submitBtnText: {
-    color: '#fff',
-    fontWeight: '800',
+    color: "#fff",
+    fontWeight: "800",
     fontSize: 18,
   },
   logoutBtn: {
     paddingVertical: 16,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 20,
     marginBottom: 40,
   },
   logoutBtnText: {
-    color: '#94A3B8',
-    fontWeight: '600',
+    color: "#94A3B8",
+    fontWeight: "600",
     fontSize: 15,
-    textDecorationLine: 'underline',
+    textDecorationLine: "underline",
   },
   previewBtn: {
-    backgroundColor: '#590194',
+    backgroundColor: "#590194",
     borderRadius: 7.86,
     width: 150,
     height: 37,
-    justifyContent: 'center',
-    alignItems: 'center',
-    alignSelf: 'center',
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "center",
     marginBottom: 15,
     marginTop: 10,
   },
   previewBtnText: {
-    color: '#fff',
-    fontWeight: '800',
+    color: "#fff",
+    fontWeight: "800",
     fontSize: 16,
-    fontFamily: 'LeagueSpartan_800ExtraBold',
+    fontFamily: "LeagueSpartan_800ExtraBold",
   },
-})
+});
