@@ -288,7 +288,7 @@ export default function InventoryManagementScreen() {
       }
     } catch (error: any) {
       console.error("Inventory Operation Failed:", error);
-      const errorMsg = error.response?.data?.message || "Operation failed";
+      const errorMsg = error.message || error.response?.data?.message || "Operation failed";
       Toast.show({
         type: "error",
         text1: "Error",
@@ -542,8 +542,12 @@ export default function InventoryManagementScreen() {
                       placeholder="0.00"
                     />
                   </View>
-                  <TouchableOpacity style={styles.paidButton}>
-                    <Text style={styles.paidButtonText}>Paid</Text>
+                  <TouchableOpacity 
+                    style={[styles.paidButton, (submitted || loading) && { backgroundColor: "#94A3B8" }]} 
+                    onPress={handleSubmit} 
+                    disabled={submitted || loading}
+                  >
+                    <Text style={styles.paidButtonText}>{submitted ? "Paid ✓" : "Paid"}</Text>
                   </TouchableOpacity>
                 </View>
               </View>

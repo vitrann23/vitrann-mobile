@@ -98,6 +98,7 @@ export interface CustomerForDelivery {
     associatedProductIds?: number[];
     associatedProductPrices?: Record<number, { price: number, isCustom: boolean }>;
     isPaid: boolean;
+    manualPayment?: number;
 }
 
 export interface OfflineQueueItem {

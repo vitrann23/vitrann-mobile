@@ -57,12 +57,21 @@ export default function CustomerDeliveryScreen() {
     refetchData,
     refreshing,
     setCustomers,
+    isFromCache,
   } = useCustomerDelivery();
+
+
 
   const markAsPaid = (customerId: number) => {
     setCustomers((prev) => {
       const updated = prev.map((c) =>
-        c.customerId === customerId ? { ...c, isPaid: true } : c,
+        c.customerId === customerId
+          ? {
+            ...c,
+            isPaid: true,
+            paymentReceived: c.manualPayment !== undefined ? c.manualPayment : c.paymentReceived,
+          }
+          : c,
       );
       // Persist to local storage
       AsyncStorage.setItem("offline_customers", JSON.stringify(updated)).catch(
@@ -91,6 +100,7 @@ export default function CustomerDeliveryScreen() {
   const [productDeliveryModal, setProductDeliveryModal] = useState(false); // For modal visibility
   const [menuVisible, setMenuVisible] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [manualB2bPayment, setManualB2bPayment] = useState<string | null>(null);
   const [currentWorkerName, setCurrentWorkerName] = useState("");
   const [confirmationVisible, setConfirmationVisible] = useState(false);
 
@@ -142,6 +152,10 @@ export default function CustomerDeliveryScreen() {
   }, [customers]);
 
   useEffect(() => {
+    setManualB2bPayment(null); // Reset manual payment field on customer change
+  }, [selectedIdx]);
+
+  useEffect(() => {
     const getWorkerName = async () => {
       const name = await AsyncStorage.getItem("workerName");
       if (name) setCurrentWorkerName(name);
@@ -155,7 +169,7 @@ export default function CustomerDeliveryScreen() {
     AsyncStorage.setItem(
       `assoc_qty_${workerIdParam}`,
       JSON.stringify(associatedProductQuantities),
-    ).catch(() => {});
+    ).catch(() => { });
   }, [associatedProductQuantities]);
 
   // Restore associatedProductQuantities on mount
@@ -164,7 +178,7 @@ export default function CustomerDeliveryScreen() {
       .then((val) => {
         if (val) setAssociatedProductQuantities(JSON.parse(val));
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const handleTabPress = (index: number) => {
@@ -276,7 +290,7 @@ export default function CustomerDeliveryScreen() {
 
       if (allSuccessful) {
         setConfirmationVisible(true);
-        setTimeout(() => setConfirmationVisible(false), 1000);
+        setTimeout(() => setConfirmationVisible(false), 50);
       } else if (anySuccessful) {
         Toast.show({
           type: "info",
@@ -322,7 +336,7 @@ export default function CustomerDeliveryScreen() {
         isPaid: finalPaidStatus,
       };
       setCustomers(updatedCustomers);
-      AsyncStorage.setItem(
+      await AsyncStorage.setItem(
         "offline_customers",
         JSON.stringify(updatedCustomers),
       );
@@ -645,7 +659,7 @@ export default function CustomerDeliveryScreen() {
         if (qty > availableNow) {
           Toast.show({
             type: "error",
-            text1: "Insufficient Stock",
+            text1: "No Stock !!",
             text2: `${product.productName}: Needed ${qty}, Available ${availableNow}. Please Add or Purchase more stock.`,
             visibilityTime: 4000,
           });
@@ -770,6 +784,13 @@ export default function CustomerDeliveryScreen() {
           >
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.retryButton, { marginTop: 12, backgroundColor: "#EF4444" }]}
+            onPress={handleLogout}
+          >
+            <Text style={styles.retryButtonText}>Logout</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -801,7 +822,27 @@ export default function CustomerDeliveryScreen() {
     return total;
   };
 
+  const isDeliveryValid = () => {
+    if (!customer) return false;
+    const associatedProducts = getAssociatedProducts();
+    for (const invItem of associatedProducts) {
+      const product = invItem.inventory?.product;
+      if (!product) continue;
+      const quantityKey = `${customer.customerId}-${product.productId}`;
+      const enteredQty = associatedProductQuantities[quantityKey];
+      const associatedQty = customerProductRelations.find(rel => rel.customerId === customer.customerId && rel.productId === product.productId && rel.thruDate === null)?.quantityAssociated || 0;
+      let qty = enteredQty !== undefined ? parseInt(enteredQty) || 0 : (!isB2B ? associatedQty : 0);
+      if (qty > 0) {
+        const totalDeliveredByAllPending = customers.reduce((sum, cust) => cust.deliveryConfirmed ? sum : sum + cust.deliveredItems.filter(item => item.productId === product.productId).reduce((s, i) => s + i.qty, 0), 0);
+        const baseQty = invItem.availableQuantity ?? invItem.totalPickedQuantity ?? 0;
+        if (qty > baseQty - totalDeliveredByAllPending) return false;
+      }
+    }
+    return true;
+  };
+
   const totalPayment = calculateTotalPaymentWithAssociated();
+  const effectiveTotalPayment = customer?.manualPayment !== undefined ? customer.manualPayment : totalPayment;
 
   const associatedProducts = getAssociatedProducts();
   // Deduplicate: remove associated items already present in deliveredItems
@@ -846,17 +887,14 @@ export default function CustomerDeliveryScreen() {
         >
           <Text style={styles.skipButtonText}>Skip</Text>
         </TouchableOpacity>
-        {/* <TouchableOpacity
-          style={styles.syncButton}
-          onPress={refetchData}
-          disabled={refreshing}
-        >
-          <Ionicons
-            name="refresh"
-            size={24}
-            color={refreshing ? "#999" : "#3880FF"}
+
+        {menuVisible && (
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.overlay}
+            onPress={() => setMenuVisible(false)}
           />
-        </TouchableOpacity> */}
+        )}
 
         <TouchableOpacity
           style={styles.hamburgerButton}
@@ -866,15 +904,31 @@ export default function CustomerDeliveryScreen() {
         </TouchableOpacity>
 
         {menuVisible && (
-          <View style={styles.menuOverlay}>
-            {["Add", "Transfer", "Purchase", "Logout"].map((item) => (
+          <View style={[styles.menuOverlay, { zIndex: 100 }]}>
+            {["Refresh", "Add", "Transfer", "Purchase", "Finish", "Logout"].map((item) => (
               <TouchableOpacity
                 key={item}
                 style={styles.menuItem}
-                onPress={() => {
+                onPress={async () => {
                   setMenuVisible(false);
-                  if (item === "Logout") {
+                  if (item === "Refresh") {
+                     await refetchData();
+                     Toast.show({ type: "success", text1: "Updated !!" });
+                  } else if (item === "Logout") {
                     handleLogout();
+                  } else if (item === "Finish") {
+                    router.push({
+                      pathname: "/CashDetailsScreen",
+                      params: {
+                        deliveryData: JSON.stringify(customers.map(c => ({
+                          customerId: c.customerId,
+                          deliveredItems: c.deliveredItems,
+                          paymentReceived: c.paymentReceived,
+                          deliveryConfirmed: c.deliveryConfirmed,
+                        }))),
+                        totalPayments: customers.reduce((sum, c) => sum + c.paymentReceived, 0).toString(),
+                      },
+                    });
                   } else if (["Add", "Transfer", "Purchase"].includes(item)) {
                     router.push({
                       pathname: "/InventoryManagementScreen",
@@ -891,6 +945,7 @@ export default function CustomerDeliveryScreen() {
                   style={[
                     styles.menuItemText,
                     item === "Logout" && { color: "#EF4444" },
+                    item === "Refresh" && { color: "#590194", fontWeight: "700" },
                   ]}
                 >
                   {item}
@@ -971,7 +1026,7 @@ export default function CustomerDeliveryScreen() {
                 style={styles.otherProductButton}
                 onPress={() => setProductDeliveryModal(true)}
               >
-                <Text style={styles.otherProductButtonText}>Other Product</Text>
+                <Text style={styles.otherProductButtonText}>Add</Text>
                 <View style={styles.iconCircle}>
                   <Ionicons name="add" size={20} color="#757575" />
                 </View>
@@ -991,10 +1046,10 @@ export default function CustomerDeliveryScreen() {
                   const product = isAssociated
                     ? inventoryItem?.inventory?.product
                     : inventory?.find(
-                        (inv) =>
-                          inv.inventory?.product.productId ===
-                          deliveredItem?.productId,
-                      )?.inventory?.product;
+                      (inv) =>
+                        inv.inventory?.product.productId ===
+                        deliveredItem?.productId,
+                    )?.inventory?.product;
                   if (!product) return null;
                   const inventoryItemForProduct = inventory?.find(
                     (inv) =>
@@ -1018,12 +1073,12 @@ export default function CustomerDeliveryScreen() {
                   const currentCustomerDeliveredExcludingCurrent = isAssociated
                     ? 0 // Associated products aren't in deliveredItems yet
                     : customer.deliveredItems
-                        .filter(
-                          (i) =>
-                            i.productId === product.productId &&
-                            i !== deliveredItem, // Exclude the current item being edited
-                        )
-                        .reduce((sum, i) => sum + i.qty, 0);
+                      .filter(
+                        (i) =>
+                          i.productId === product.productId &&
+                          i !== deliveredItem, // Exclude the current item being edited
+                      )
+                      .reduce((sum, i) => sum + i.qty, 0);
 
                   const baseQty =
                     inventoryItemForProduct?.availableQuantity ??
@@ -1032,16 +1087,16 @@ export default function CustomerDeliveryScreen() {
                   const availableQty = Math.max(
                     0,
                     baseQty -
-                      totalDeliveredByOthers -
-                      currentCustomerDeliveredExcludingCurrent,
+                    totalDeliveredByOthers -
+                    currentCustomerDeliveredExcludingCurrent,
                   );
                   const associatedQty = isAssociated
                     ? customerProductRelations.find(
-                        (rel) =>
-                          rel.customerId === customer.customerId &&
-                          rel.productId === product.productId &&
-                          rel.thruDate === null,
-                      )?.quantityAssociated || 0
+                      (rel) =>
+                        rel.customerId === customer.customerId &&
+                        rel.productId === product.productId &&
+                        rel.thruDate === null,
+                    )?.quantityAssociated || 0
                     : 0;
                   const quantityKey = `${customer.customerId}-${product.productId}`;
                   const defaultValue = isB2B
@@ -1054,9 +1109,9 @@ export default function CustomerDeliveryScreen() {
                     : deliveredItem?.qty.toString();
                   const priceValue = isAssociated
                     ? (
-                        customer.associatedProductPrices?.[product.productId]
-                          ?.price || Number(product.currentProductPrice)
-                      ).toString()
+                      customer.associatedProductPrices?.[product.productId]
+                        ?.price || Number(product.currentProductPrice)
+                    ).toString()
                     : deliveredItem?.price.toString();
                   const isAlreadyAdded = customer.deliveredItems.some(
                     (d) => d.productId === product.productId,
@@ -1152,7 +1207,7 @@ export default function CustomerDeliveryScreen() {
                           <TextInput
                             style={styles.input}
                             value={currentQuantity}
-                            placeholder="Other Product v2"
+                            placeholder="Add"
                             placeholderTextColor="#999"
                             onChangeText={(text) => {
                               let numText = text.replace(/[^0-9]/g, "");
@@ -1187,12 +1242,17 @@ export default function CustomerDeliveryScreen() {
                       )}
 
                       {customer.deliveryConfirmed && isAlreadyAdded && (
-                        <View style={styles.checkmarkIcon}>
-                          <Ionicons
-                            name="checkmark-circle"
-                            size={28}
-                            color="#10B981"
-                          />
+                        <View style={{ flexDirection: "row", alignItems: "center" }}>
+                          <Text style={{ marginRight: 8, fontSize: 16, fontWeight: "600", color: "#10B981" }}>
+                            Qty: {parseInt(currentQuantity || "") || (isAssociated ? 0 : deliveredItem?.qty)}
+                          </Text>
+                          <View style={styles.checkmarkIcon}>
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={28}
+                              color="#10B981"
+                            />
+                          </View>
                         </View>
                       )}
                     </View>
@@ -1208,37 +1268,50 @@ export default function CustomerDeliveryScreen() {
                   ]}
                 >
                   <View style={styles.paymentInputContainer}>
-                    <Text
+                    <TextInput
                       style={{
                         fontSize: 20,
                         fontWeight: "700",
                         color: "#000",
                         alignSelf: "center",
+                        minWidth: 80,
+                        textAlign: "center",
+                        borderBottomWidth: 1,
+                        borderColor: "#CBD5E1",
                       }}
-                    >
-                      ₹ {totalPayment.toFixed(2)}
-                    </Text>
+                      editable={!customer.isPaid && !customer.deliveryConfirmed}
+                      value={effectiveTotalPayment.toFixed(2)}
+                      onChangeText={(val) => {
+                        const clean = val.replace(/[^0-9.]/g, "");
+                        const amount = parseFloat(clean) || 0;
+                        setCustomers(prev => prev.map(c => c.id === customer.id ? { ...c, manualPayment: amount } : c));
+                      }}
+                      keyboardType="numeric"
+                      placeholder="0.00"
+                    />
                   </View>
 
                   <TouchableOpacity
                     style={[
                       styles.collectButton,
-                      (totalPayment === 0 ||
+                      (effectiveTotalPayment <= 0 ||
+                        !isDeliveryValid() ||
                         customer.isPaid ||
                         customer.deliveryConfirmed) && {
                         backgroundColor: "#E2E8F0",
                       },
                     ]}
                     disabled={
-                      totalPayment === 0 ||
+                      effectiveTotalPayment <= 0 ||
+                      !isDeliveryValid() ||
                       customer.isPaid ||
                       customer.deliveryConfirmed
                     }
                     onPress={async () => {
-                      if (!customer || customer.isPaid || totalPayment <= 0)
+                      if (!customer || customer.isPaid || effectiveTotalPayment <= 0 || !isDeliveryValid())
                         return;
 
-                      const amount = totalPayment;
+                      const amount = effectiveTotalPayment;
 
                       // OPTIMISTIC UPDATE: Instant feedback for the user
                       markAsPaid(customer.customerId);
@@ -1659,23 +1732,30 @@ const styles = StyleSheet.create({
   //   padding: 8,
   //   borderRadius: 8,
   //   backgroundColor: "#F1F5F9",
-  // },
   menuOverlay: {
     position: "absolute",
-    top: 50,
+    top: 55,
     right: 16,
-    width: 200,
+    width: 160,
     backgroundColor: "#fff",
-    borderRadius: 10,
+    borderRadius: 12,
     paddingVertical: 8,
-    zIndex: 1200,
-    elevation: 15,
+    elevation: 8,
     shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
     borderWidth: 1,
-    borderColor: "#F0F0F0",
+    borderColor: "#F1F5F9",
+  },
+  overlay: {
+    position: "absolute",
+    top: -200,
+    left: -200,
+    right: -200,
+    bottom: -2000,
+    backgroundColor: "transparent",
+    zIndex: 90,
   },
   menuItem: {
     paddingVertical: 12,

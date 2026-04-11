@@ -121,7 +121,7 @@ export const ProductDeliveryModal: React.FC<ProductDeliveryModalProps> = ({
 
   const getAvailableQty = (product: any) => {
     const globalDelivered = getTotalDelivered(product.productId);
-    return product.availableQty - globalDelivered;
+    return Math.max(0, product.availableQty - globalDelivered);
   };
 
   const handleAddAllProducts = () => {
@@ -133,7 +133,7 @@ export const ProductDeliveryModal: React.FC<ProductDeliveryModalProps> = ({
 
       if (enteredQty > 0) {
         const globalDelivered = getTotalDelivered(product.productId);
-        const availableQty = product.availableQty - globalDelivered;
+        const availableQty = Math.max(0, product.availableQty - globalDelivered);
 
         // Validate quantity
         if (enteredQty > availableQty) {
