@@ -91,6 +91,7 @@ export default function CustomerDeliveryScreen() {
   const [productDeliveryModal, setProductDeliveryModal] = useState(false); // For modal visibility
   const [menuVisible, setMenuVisible] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [manualB2bPayment, setManualB2bPayment] = useState<string | null>(null);
   const [currentWorkerName, setCurrentWorkerName] = useState("");
   const [confirmationVisible, setConfirmationVisible] = useState(false);
 
@@ -140,6 +141,10 @@ export default function CustomerDeliveryScreen() {
       hasInitialJumped.current = true; // Mark as done so we don't jump while user is browsing
     }
   }, [customers]);
+
+  useEffect(() => {
+    setManualB2bPayment(null); // Reset manual payment field on customer change
+  }, [selectedIdx]);
 
   useEffect(() => {
     const getWorkerName = async () => {
@@ -322,7 +327,7 @@ export default function CustomerDeliveryScreen() {
         isPaid: finalPaidStatus,
       };
       setCustomers(updatedCustomers);
-      AsyncStorage.setItem(
+      await AsyncStorage.setItem(
         "offline_customers",
         JSON.stringify(updatedCustomers),
       );
@@ -801,7 +806,27 @@ export default function CustomerDeliveryScreen() {
     return total;
   };
 
+  const isDeliveryValid = () => {
+    if (!customer) return false;
+    const associatedProducts = getAssociatedProducts();
+    for (const invItem of associatedProducts) {
+      const product = invItem.inventory?.product;
+      if (!product) continue;
+      const quantityKey = `${customer.customerId}-${product.productId}`;
+      const enteredQty = associatedProductQuantities[quantityKey];
+      const associatedQty = customerProductRelations.find(rel => rel.customerId === customer.customerId && rel.productId === product.productId && rel.thruDate === null)?.quantityAssociated || 0;
+      let qty = enteredQty !== undefined ? parseInt(enteredQty) || 0 : (!isB2B ? associatedQty : 0);
+      if (qty > 0) {
+        const totalDeliveredByAllPending = customers.reduce((sum, cust) => cust.deliveryConfirmed ? sum : sum + cust.deliveredItems.filter(item => item.productId === product.productId).reduce((s, i) => s + i.qty, 0), 0);
+        const baseQty = invItem.availableQuantity ?? invItem.totalPickedQuantity ?? 0;
+        if (qty > baseQty - totalDeliveredByAllPending) return false;
+      }
+    }
+    return true;
+  };
+
   const totalPayment = calculateTotalPaymentWithAssociated();
+  const effectiveTotalPayment = manualB2bPayment !== null ? parseFloat(manualB2bPayment) || 0 : totalPayment;
 
   const associatedProducts = getAssociatedProducts();
   // Deduplicate: remove associated items already present in deliveredItems
@@ -867,7 +892,7 @@ export default function CustomerDeliveryScreen() {
 
         {menuVisible && (
           <View style={styles.menuOverlay}>
-            {["Add", "Transfer", "Purchase", "Logout"].map((item) => (
+            {["Add", "Transfer", "Purchase", "Finish", "Logout"].map((item) => (
               <TouchableOpacity
                 key={item}
                 style={styles.menuItem}
@@ -875,6 +900,19 @@ export default function CustomerDeliveryScreen() {
                   setMenuVisible(false);
                   if (item === "Logout") {
                     handleLogout();
+                  } else if (item === "Finish") {
+                    router.push({
+                      pathname: "/CashDetailsScreen",
+                      params: {
+                        deliveryData: JSON.stringify(customers.map(c => ({
+                          customerId: c.customerId,
+                          deliveredItems: c.deliveredItems,
+                          paymentReceived: c.paymentReceived,
+                          deliveryConfirmed: c.deliveryConfirmed,
+                        }))),
+                        totalPayments: customers.reduce((sum, c) => sum + c.paymentReceived, 0).toString(),
+                      },
+                    });
                   } else if (["Add", "Transfer", "Purchase"].includes(item)) {
                     router.push({
                       pathname: "/InventoryManagementScreen",
@@ -1187,12 +1225,17 @@ export default function CustomerDeliveryScreen() {
                       )}
 
                       {customer.deliveryConfirmed && isAlreadyAdded && (
-                        <View style={styles.checkmarkIcon}>
-                          <Ionicons
-                            name="checkmark-circle"
-                            size={28}
-                            color="#10B981"
-                          />
+                        <View style={{ flexDirection: "row", alignItems: "center" }}>
+                          <Text style={{ marginRight: 8, fontSize: 16, fontWeight: "600", color: "#10B981" }}>
+                            Qty: {parseInt(currentQuantity || "") || (isAssociated ? 0 : deliveredItem?.qty)}
+                          </Text>
+                          <View style={styles.checkmarkIcon}>
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={28}
+                              color="#10B981"
+                            />
+                          </View>
                         </View>
                       )}
                     </View>
@@ -1208,37 +1251,49 @@ export default function CustomerDeliveryScreen() {
                   ]}
                 >
                   <View style={styles.paymentInputContainer}>
-                    <Text
+                    <TextInput
                       style={{
                         fontSize: 20,
                         fontWeight: "700",
                         color: "#000",
                         alignSelf: "center",
+                        minWidth: 80,
+                        textAlign: "center",
+                        borderBottomWidth: 1,
+                        borderColor: "#CBD5E1",
                       }}
-                    >
-                      ₹ {totalPayment.toFixed(2)}
-                    </Text>
+                      editable={!customer.isPaid && !customer.deliveryConfirmed}
+                      value={manualB2bPayment !== null ? manualB2bPayment : effectiveTotalPayment.toFixed(2)}
+                      onChangeText={(val) => {
+                        const clean = val.replace(/[^0-9.]/g, "");
+                        setManualB2bPayment(clean);
+                      }}
+                      keyboardType="numeric"
+                      placeholder="0.00"
+                    />
                   </View>
 
                   <TouchableOpacity
                     style={[
                       styles.collectButton,
-                      (totalPayment === 0 ||
+                      (effectiveTotalPayment <= 0 ||
+                        !isDeliveryValid() ||
                         customer.isPaid ||
                         customer.deliveryConfirmed) && {
                         backgroundColor: "#E2E8F0",
                       },
                     ]}
                     disabled={
-                      totalPayment === 0 ||
+                      effectiveTotalPayment <= 0 ||
+                      !isDeliveryValid() ||
                       customer.isPaid ||
                       customer.deliveryConfirmed
                     }
                     onPress={async () => {
-                      if (!customer || customer.isPaid || totalPayment <= 0)
+                      if (!customer || customer.isPaid || effectiveTotalPayment <= 0 || !isDeliveryValid())
                         return;
 
-                      const amount = totalPayment;
+                      const amount = effectiveTotalPayment;
 
                       // OPTIMISTIC UPDATE: Instant feedback for the user
                       markAsPaid(customer.customerId);

@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -41,6 +42,7 @@ interface Product {
 const MorningStockScreen = () => {
   const params = useLocalSearchParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { height } = useWindowDimensions();
   const workerId = params.workerId as string;
 
@@ -130,7 +132,7 @@ const MorningStockScreen = () => {
           (error as any)?.status === 401 ||
           (error as any)?.response?.status === 401
         ) {
-          router.replace("/");
+          handleLogout();
           return;
         }
         Toast.show({
@@ -203,6 +205,7 @@ const MorningStockScreen = () => {
       )) as any;
       const result = response;
       if (result.success) {
+        queryClient.invalidateQueries({ queryKey: ["inventory"] });
         Toast.show({
           type: "success",
           text1: "Success",
