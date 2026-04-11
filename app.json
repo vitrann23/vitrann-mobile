@@ -4,7 +4,7 @@
     "slug": "MyDiaryApp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo-vitran-primary.png",
+    "icon": "./assets/images/icon_fix.png",
     "scheme": "mydiaryapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -13,7 +13,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo-vitran-primary.png",
+        "foregroundImage": "./assets/images/icon_fix.png",
         "backgroundColor": "#590194"
       },
       "edgeToEdgeEnabled": true,

@@ -31,6 +31,7 @@ export const useCustomerDelivery = () => {
   const [customers, setCustomers] = useState<CustomerForDelivery[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isFromCache, setIsFromCache] = useState(false);
 
   // Combine loading states
   const isApiLoading =
@@ -63,12 +64,13 @@ export const useCustomerDelivery = () => {
                 isPaid: local.isPaid || tc.isPaid,
                 deliveryConfirmed:
                   local.deliveryConfirmed || tc.deliveryConfirmed,
-                deliveredItems: local.deliveryConfirmed
+                deliveredItems: (local.deliveryConfirmed || local.deliveredItems?.length > 0)
                   ? local.deliveredItems
                   : tc.deliveredItems,
-                paymentReceived: local.deliveryConfirmed
+                paymentReceived: local.paymentReceived !== undefined
                   ? local.paymentReceived
                   : tc.paymentReceived,
+                manualPayment: local.manualPayment,
               };
             }
             return tc;
@@ -108,6 +110,7 @@ export const useCustomerDelivery = () => {
       const cachedCustomers = await AsyncStorage.getItem("offline_customers");
       if (cachedCustomers) {
         setCustomers(JSON.parse(cachedCustomers));
+        setIsFromCache(true);
         setLoading(false);
       } else {
         setLoading(false);
@@ -133,5 +136,6 @@ export const useCustomerDelivery = () => {
     refetchData,
     refreshing,
     setCustomers, // Exposed for local updates (optimistic UI)
+    isFromCache,
   };
 };

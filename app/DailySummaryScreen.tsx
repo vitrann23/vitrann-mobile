@@ -274,11 +274,11 @@ export default function DailySummaryScreen() {
                       flex: 1,
                       textAlign: "right",
                       fontWeight: "700",
-                      color: item.variance !== 0 ? "#EF4444" : "#16A34A",
+                      color: item.variance > 0 ? "#16A34A" : item.variance < 0 ? "#EF4444" : "#64748B",
                     },
                   ]}
                 >
-                  {item.variance}
+                  {item.variance > 0 ? `+${item.variance}` : item.variance}
                 </Text>
               </View>
             ))}
@@ -376,10 +376,11 @@ export default function DailySummaryScreen() {
                     fontWeight: "900",
                     color:
                       (summaryData?.paymentFromCustomer || 0) -
-                        (cashRecord?.amount || 0) !==
-                      0
+                        (cashRecord?.amount || 0) > 0
                         ? "#EF4444"
-                        : "#16A34A",
+                        : (summaryData?.paymentFromCustomer || 0) - (cashRecord?.amount || 0) < 0 
+                          ? "#16A34A" 
+                          : "#64748B",
                   },
                 ]}
               >
@@ -538,6 +539,7 @@ const styles = StyleSheet.create({
     color: "#64748B",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    fontFamily: "LeagueSpartan_700Bold",
   },
   tableRow: {
     flexDirection: "row",
@@ -551,6 +553,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#334155",
     fontWeight: "500",
+    fontFamily: "LeagueSpartan_600SemiBold",
   },
   totalBadge: {
     backgroundColor: "#F1F5F9",
@@ -584,6 +587,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "800",
     fontSize: 18,
+    fontFamily: "LeagueSpartan_800ExtraBold",
   },
   logoutBtn: {
     paddingVertical: 16,

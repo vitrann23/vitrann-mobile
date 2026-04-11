@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFFFFF" },
   content: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 30 },
   logoContainer: { alignItems: "center", marginBottom: 30, marginTop: 40 },
-  logo: { width: 180, height: 180 },
+  logo: { width: 320, height: 300 },
   title: {
     fontSize: 20,
     color: "#6B7280",
