@@ -8,7 +8,7 @@ const queryClient = new QueryClient({
             staleTime: 0, // Always fetch fresh
             gcTime: 0, // No garbage collection caching
             retry: 2, // Retry failed requests twice
-            refetchOnWindowFocus: true, // Refetch on app focus
+            refetchOnWindowFocus: false, // Refetch manually when needed to avoid race conditions
             refetchOnMount: true, // Refetch deeply on unmount/mount
             refetchOnReconnect: true, // Refetch when network reconnects
         },

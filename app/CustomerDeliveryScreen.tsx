@@ -338,7 +338,7 @@ export default function CustomerDeliveryScreen() {
         });
       }
 
-      const finalPaidStatus = customer.isPaid || isB2B;
+
 
       // Mark as confirmed locally regardless (Optimistic UI)
       const updatedCustomers = [...customers];
@@ -1294,7 +1294,7 @@ export default function CustomerDeliveryScreen() {
                       width: '100%'
                     }}
                     keyboardType="numeric"
-                    value={effectiveTotalPayment.toFixed(2)}
+                    value={effectiveTotalPayment > 0 ? effectiveTotalPayment.toString() : ""}
                     onChangeText={(val) => {
                       const clean = val.replace(/[^0-9.]/g, "");
                       const amount = parseFloat(clean) || 0;

@@ -135,7 +135,7 @@ export default function DailySummaryScreen() {
 
       // Process summary data
       if (summaryResponse.success && summaryResponse.data) {
-        setSummaryData({ ...summaryResponse.data, paymentFromCustomer: localPaymentTotal });
+        setSummaryData(summaryResponse.data);
       }
 
       // Process cash record

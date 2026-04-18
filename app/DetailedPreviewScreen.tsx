@@ -133,7 +133,9 @@ export default function DetailedPreviewScreen() {
           if (!buffer) return null;
 
           // Per-item bill is just qty * original_price
-          const newQty = parseInt(buffer.quantity);
+          const newQty = parseInt(buffer.quantity) || 0;
+          if (isNaN(newQty)) return null;
+          
           const newBill = d.price * newQty;
 
           return apiClient.post("/deliveries/update-item", {
@@ -156,15 +158,25 @@ export default function DetailedPreviewScreen() {
             let custs = JSON.parse(offlineData);
             const idx = custs.findIndex((c: any) => c.customerId === customer.customerId);
             if (idx !== -1) {
-              // Update items
+              // Update items and calculate new total
+              let newTotal = 0;
               custs[idx].deliveredItems = custs[idx].deliveredItems.map((item: any) => {
                 const buffer = editBuffers[item.inventoryId];
-                if (buffer) return { ...item, qty: parseInt(buffer.quantity), price: item.originalPrice * parseInt(buffer.quantity) };
+                if (buffer) {
+                  const qty = parseInt(buffer.quantity) || 0;
+                  const price = (item.originalPrice || item.price) * qty;
+                  newTotal += price;
+                  return { ...item, qty, price };
+                }
+                newTotal += (item.price || 0);
                 return item;
               });
-              // Update paymentReceived
-              custs[idx].paymentReceived = parseFloat(editTotalAmount);
-              custs[idx].isPaid = (parseFloat(editTotalAmount) > 0);
+
+              // Update paymentReceived only if B2B (as B2C collection is separate)
+              if (customer.classification === "B2B") {
+                custs[idx].paymentReceived = newTotal;
+                custs[idx].isPaid = newTotal > 0;
+              }
               
               await AsyncStorage.setItem("offline_customers", JSON.stringify(custs));
             }
