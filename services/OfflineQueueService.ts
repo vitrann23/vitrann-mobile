@@ -57,7 +57,7 @@ export class OfflineQueueService {
 
                 // Handle different action types
                 if (item.type === 'delivery') {
-                    await apiClient.post('/daily-activity-ci/worker-delivery', item.data);
+                    await apiClient.post('/deliveries/process', item.data);
                     success = true;
                 }
 

@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import Constants from 'expo-constants'
-import { useLocalSearchParams, useRouter } from "expo-router"
-import { useMemo, useState } from "react"
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -15,383 +15,408 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from "react-native"
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
-import Toast from 'react-native-toast-message'
-import apiClient from '../services/apiClient'
+  StatusBar,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import Toast from "react-native-toast-message";
+import apiClient from "../services/apiClient";
 
 const notes = [
-  { label: "₹500", value: 500, color: "#87CEEB" },
-  { label: "₹200", value: 200, color: "#87CEEB" },
-  { label: "₹100", value: 100, color: "#87CEEB" },
-  { label: "₹50", value: 50, color: "#87CEEB" },
-  { label: "₹20", value: 20, color: "#87CEEB" },
-  { label: "₹10", value: 10, color: "#87CEEB" },
-]
+  { label: "500", value: 500 },
+  { label: "200", value: 200 },
+  { label: "100", value: 100 },
+  { label: "50", value: 50 },
+  { label: "20", value: 20 },
+  { label: "10", value: 10 },
+];
 
-const coins = [
-  { label: "₹10 (Coin)", value: 10, color: "#87CEEB" },
-  { label: "₹5", value: 5, color: "#87CEEB" },
-  { label: "₹2", value: 2, color: "#87CEEB" },
-  { label: "₹1", value: 1, color: "#87CEEB" },
-]
-
-
+const coins = [{ label: "Coin", value: 1 }];
 
 // API function to submit total amount
 const submitTotalAmount = async (amount: number) => {
   try {
-    const response = await apiClient.post('/deliveries/total-amount', {
-      amount: amount
-    }) as any
-    return response
+    const response = (await apiClient.post("/deliveries/total-amount", {
+      amount: amount,
+    })) as any;
+    return response;
   } catch (error) {
-    console.error('API request failed:', error)
-    throw error
+    console.error("API request failed:", error);
+    throw error;
   }
-}
+};
 
 export default function CashDetailsScreen() {
-  const router = useRouter()
-  const params = useLocalSearchParams()
-  const insets = useSafeAreaInsets()
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
 
-  const maxCashAmount = params.maxCashAmount ? Number(params.maxCashAmount) : 0
+  const maxCashAmount = params.maxCashAmount ? Number(params.maxCashAmount) : 0;
 
-  const [noteCounts, setNoteCounts] = useState<Record<string, string>>({})
-  const [coinCounts, setCoinCounts] = useState<Record<string, string>>({})
-  const [submitting, setSubmitting] = useState(false) // Loading state
+  const [noteCounts, setNoteCounts] = useState<Record<string, string>>({});
+  const [coinCounts, setCoinCounts] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false); // Loading state
 
-  const computeTotal = (notesObj: Record<string, string>, coinsObj: Record<string, string>) => {
-    let total = 0
+  const computeTotal = (
+    notesObj: Record<string, string>,
+    coinsObj: Record<string, string>,
+  ) => {
+    let total = 0;
     Object.entries(notesObj).forEach(([label, val]) => {
-      const note = notes.find((n) => n.label === label)
-      if (note) total += note.value * (Number(val) || 0)
-    })
+      const note = notes.find((n) => n.label === label);
+      if (note) total += note.value * (Number(val) || 0);
+    });
     Object.entries(coinsObj).forEach(([label, val]) => {
-      const coin = coins.find((c) => c.label === label)
-      if (coin) total += coin.value * (Number(val) || 0)
-    })
-    return total
-  }
+      const coin = coins.find((c) => c.label === label);
+      if (coin) total += coin.value * (Number(val) || 0);
+    });
+    return total;
+  };
 
-  const totalAmount = useMemo(() => computeTotal(noteCounts, coinCounts), [noteCounts, coinCounts])
+  const totalAmount = useMemo(
+    () => computeTotal(noteCounts, coinCounts),
+    [noteCounts, coinCounts],
+  );
 
-  const onChangeCount = (type: "note" | "coin", label: string, value: string) => {
-    const filtered = value.replace(/[^0-9]/g, "")
+  const onChangeCount = (
+    type: "note" | "coin",
+    label: string,
+    value: string,
+  ) => {
+    const filtered = value.replace(/[^0-9]/g, "");
     if (!filtered) {
-      if (type === "note") setNoteCounts((prev) => ({ ...prev, [label]: "" }))
-      else setCoinCounts((prev) => ({ ...prev, [label]: "" }))
-      return
+      if (type === "note") setNoteCounts((prev) => ({ ...prev, [label]: "" }));
+      else setCoinCounts((prev) => ({ ...prev, [label]: "" }));
+      return;
     }
-    const valInt = Number(filtered)
-    if (isNaN(valInt)) return
+    const valInt = Number(filtered);
+    if (isNaN(valInt)) return;
 
-    const tempNotes = { ...noteCounts }
-    const tempCoins = { ...coinCounts }
-    if (type === "note") tempNotes[label] = filtered
-    else tempCoins[label] = filtered
+    const tempNotes = { ...noteCounts };
+    const tempCoins = { ...coinCounts };
+    if (type === "note") tempNotes[label] = filtered;
+    else tempCoins[label] = filtered;
 
-    if (type === "note") setNoteCounts(tempNotes)
-    else setCoinCounts(tempCoins)
-  }
+    if (type === "note") setNoteCounts(tempNotes);
+    else setCoinCounts(tempCoins);
+  };
 
   const onNext = async () => {
     // Validate that user has entered some amount
     if (totalAmount <= 0) {
       Toast.show({
-        type: 'error',
-        text1: 'Enter Cash Details',
-        text2: 'Please enter the cash amount collected',
+        type: "error",
+        text1: "Enter Cash Details",
+        text2: "Please enter the cash amount collected",
         visibilityTime: 3000,
-      })
-      return
+      });
+      return;
     }
 
-    setSubmitting(true)
+    setSubmitting(true);
 
     try {
       // Submit total amount to API
-      const response = await submitTotalAmount(totalAmount)
+      const response = await submitTotalAmount(totalAmount);
 
       if (response.success) {
         Toast.show({
-          type: 'success',
-          text1: 'Amount Submitted',
+          type: "success",
+          text1: "Amount Submitted",
           text2: `₹${totalAmount} submitted successfully`,
           visibilityTime: 2000,
-        })
+        });
 
         // Navigate to next screen with cash details
-        const cashDetails = { noteCounts, coinCounts, totalAmount }
+        const cashDetails = { noteCounts, coinCounts, totalAmount };
 
         // Small delay to show success message
         setTimeout(() => {
           router.push({
-            pathname: "/ReturnedStocksScreen",
+            pathname: "/DailySummaryScreen",
             params: {
               ...params,
               cashDetails: JSON.stringify(cashDetails),
-              submittedAmount: totalAmount.toString()
+              submittedAmount: totalAmount.toString(),
             },
-          })
-        }, 1200)
-
+          });
+        }, 1200);
       } else {
-        throw new Error(response.message || 'Failed to submit amount')
+        if (
+          response.message === "Cash in hand entry already exists for today" &&
+          response.data
+        ) {
+          router.push({
+            pathname: "/EntriesSubmitted" as any,
+            params: { amount: response.data.amount },
+          });
+          return;
+        }
+        throw new Error(response.message || "Failed to submit amount");
+      }
+    } catch (error: any) {
+      console.error("Error submitting total amount:", error);
+
+      // In case it comes back as an HTTP error rather than a 201 with success: false
+      const errorData = error?.response?.data;
+      if (
+        errorData?.message === "Cash in hand entry already exists for today" &&
+        errorData?.data
+      ) {
+        router.push({
+          pathname: "/EntriesSubmitted" as any,
+          params: { amount: errorData.data.amount },
+        });
+        return;
       }
 
-    } catch (error) {
-      console.error('Error submitting total amount:', error)
-
       Toast.show({
-        type: 'error',
-        text1: 'Submission Failed',
-        text2: 'Unable to submit amount. Please try again.',
+        type: "error",
+        text1: "Submission Failed",
+        text2: "Unable to submit amount. Please try again.",
         visibilityTime: 4000,
-      })
+      });
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
 
-  const renderCard = (item: { label: string; value: number; color: string }, type: "note" | "coin") => (
-    <View key={item.label} style={[styles.card, { backgroundColor: item.color }]}>
-      <Text style={styles.label}>{item.label}</Text>
-      <TextInput
-        style={styles.input}
-        keyboardType="numeric"
-        maxLength={3}
-        value={type === "note" ? (noteCounts[item.label] ?? "") : (coinCounts[item.label] ?? "")}
-        placeholder="0"
-        placeholderTextColor="#999"
-        onChangeText={(val) => onChangeCount(type, item.label, val)}
-        editable={!submitting} // Disable during submission
-      />
+  const renderCard = (
+    item: { label: string; value: number },
+    type: "note" | "coin",
+  ) => (
+    <View key={item.label} style={styles.card}>
+      <View style={styles.labelContainer}>
+        <Text style={styles.currencySymbol}>₹</Text>
+        <Text style={styles.label}>{item.label}</Text>
+      </View>
+      <View style={styles.inputWrapper}>
+        <TextInput
+          style={styles.input}
+          keyboardType="numeric"
+          maxLength={3}
+          value={
+            type === "note"
+              ? (noteCounts[item.label] ?? "")
+              : (coinCounts[item.label] ?? "")
+          }
+          placeholder="0"
+          placeholderTextColor="#999"
+          onChangeText={(val) => onChangeCount(type, item.label, val)}
+          editable={!submitting}
+        />
+      </View>
     </View>
-  )
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+      {/* Standardized Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Cash Details</Text>
+      </View>
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
         <ScrollView
-          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: insets.bottom + 20 },
+          ]}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.titleContainer}>
-            <Text style={styles.title}>Enter Cash Details</Text>
-            <View style={styles.titleUnderline} />
+          <View style={styles.introContainer}>
+            <Text style={styles.introTitle}>Enter Cash Details</Text>
           </View>
 
-          <View style={styles.sectionHeader}>
-            <Image source={require("../assets/images/Notes.png")} style={styles.sectionIcon} />
-            <Text style={styles.sectionTitle}>Notes</Text>
-          </View>
-          {notes.map((note) => renderCard(note, "note"))}
+          <View style={styles.mainCard}>
+            {notes.map((note) => renderCard(note, "note"))}
+            {coins.map((coin) => renderCard(coin, "coin"))}
 
-          <View style={styles.sectionHeader}>
-            <Image source={require("../assets/images/Coins.png")} style={styles.sectionIcon} />
-            <Text style={styles.sectionTitle}>Coins</Text>
-          </View>
-          {coins.map((coin) => renderCard(coin, "coin"))}
-
-          <View style={[styles.totalContainer, totalAmount > 0 && styles.totalContainerActive]}>
-            <Text style={styles.totalLabel}>Total Entered</Text>
-            <Text style={[styles.totalAmount, totalAmount > 0 && styles.totalAmountActive]}>
-              ₹{totalAmount}
-            </Text>
-            {totalAmount > 0 && (
-              <Text style={styles.totalSubtext}>This amount will be submitted</Text>
-            )}
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabelText}>Total</Text>
+              <View style={styles.totalValueBox}>
+                <Text style={styles.totalValueText}>
+                  {totalAmount.toLocaleString("en-IN")}
+                </Text>
+              </View>
+            </View>
           </View>
 
           <TouchableOpacity
-            style={[
-              styles.nextButton,
-              submitting && styles.nextButtonDisabled,
-              totalAmount <= 0 && styles.nextButtonInactive
-            ]}
+            style={[styles.nextButton, submitting && styles.nextButtonDisabled]}
             onPress={onNext}
             activeOpacity={0.85}
             disabled={submitting || totalAmount <= 0}
           >
             {submitting ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator color="#ffffff" size="small" />
-                <Text style={styles.nextButtonText}>Submitting...</Text>
-              </View>
+              <ActivityIndicator color="#ffffff" size="small" />
             ) : (
-              <Text style={styles.nextButtonText}>
-                {totalAmount > 0 ? `Submit ₹${totalAmount}` : 'Enter Amount First'}
-              </Text>
+              <Text style={styles.nextButtonText}>Enter</Text>
             )}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
-  content: { padding: 20 },
-  titleContainer: {
-    alignItems: "center",
-    marginBottom: 32,
+  container: {
+    flex: 1,
+    backgroundColor: "#F7F7F7",
   },
-  title: {
-    fontSize: 30,
-    fontWeight: "700",
-    color: "#1A365D",
-    textAlign: "center",
-    letterSpacing: -0.8,
-    textShadowColor: "rgba(30, 41, 59, 0.1)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-    marginBottom: 8,
-  },
-  titleUnderline: {
-    width: 60,
-    height: 4,
-    backgroundColor: "#1e40af",
-    borderRadius: 2,
-    shadowColor: "#1e40af",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  sectionHeader: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 24,
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#FFFFFF",
   },
-  sectionIcon: {
-    marginRight: 8,
-    width: 24,
-    height: 24,
+  backButton: {
+    marginRight: 16,
   },
-  sectionTitle: {
+  headerTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#334155",
-    letterSpacing: -0.3,
+    color: "#333",
   },
+  content: {
+    paddingHorizontal: 17,
+    paddingTop: 10,
+  },
+  introContainer: {
+    height: 50,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  introTitle: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#590194",
+    textAlign: "center",
+    fontFamily: "LeagueSpartan_800ExtraBold",
+  },
+  mainCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    padding: 15,
+    paddingTop: 20,
+    marginTop: 15,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+
   card: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderRadius: 16,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    marginBottom: 14,
-    backgroundColor: "#1E90FF",
-    shadowColor: "#0000FF",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: "#999", // Outline color from image
+    backgroundColor: "#fff",
+  },
+  labelContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  currencySymbol: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#000",
+    marginRight: 10,
   },
   label: {
-    fontSize: 19,
+    fontSize: 24,
     fontWeight: "700",
-    color: "#1e293b",
-    letterSpacing: -0.2,
+    color: "#000",
+  },
+  inputWrapper: {
+    backgroundColor: "#D9E8FC", // Light blue background for input
+    borderRadius: 6,
+    width: 80,
+    height: 36,
+    justifyContent: "center",
+    alignItems: "center",
   },
   input: {
-    width: 80,
-    height: 48,
-    borderWidth: 2,
-    borderColor: "#cbd5e1",
-    borderRadius: 12,
+    width: "100%",
+    height: "100%",
     textAlign: "center",
     fontSize: 18,
     fontWeight: "700",
     color: "#1e293b",
-    backgroundColor: "#f8fafc",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
   },
-  totalContainer: {
-    marginTop: 32,
-    padding: 24,
-    backgroundColor: "#ffffff",
-    borderRadius: 20,
+  totalRow: {
+    flexDirection: "row",
     alignItems: "center",
-    shadowColor: "#1e40af",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 6,
+    justifyContent: "space-between",
+    marginTop: 25,
+    marginBottom: 10,
+    paddingHorizontal: 5,
+  },
+  totalLabelText: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#000",
+  },
+  totalValueBox: {
     borderWidth: 1,
-    borderColor: "#e0e7ff",
+    borderColor: "#000",
+    borderRadius: 5,
+    paddingHorizontal: 15,
+    height: 40,
+    minWidth: 140,
+    justifyContent: "center",
+    alignItems: "flex-end",
+    backgroundColor: "#fff",
   },
-  totalContainerActive: {
-    backgroundColor: "#EFF6FF",
-    borderColor: "#1e40af",
-    borderWidth: 2,
-  },
-  totalLabel: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#475569",
-    letterSpacing: -0.1,
-  },
-  totalAmount: {
-    fontSize: 38,
-    fontWeight: "900",
-    color: "#1e40af",
-    marginTop: 6,
-    letterSpacing: -1,
-  },
-  totalAmountActive: {
-    color: "#059669",
-  },
-  totalSubtext: {
-    fontSize: 14,
-    color: "#64748B",
-    marginTop: 8,
-    fontStyle: "italic",
+  totalValueText: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#000",
   },
   nextButton: {
-    marginTop: 40,
-    borderRadius: 16,
-    paddingVertical: 18,
+    marginTop: 25,
+    height: 56,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#1e40af",
-    shadowColor: "#1e40af",
+    backgroundColor: "#590194",
+    shadowColor: "#590194",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  nextButtonInactive: {
-    backgroundColor: "#94A3B8",
-    shadowColor: "#94A3B8",
+    shadowRadius: 5,
+    elevation: 4,
   },
   nextButtonDisabled: {
-    backgroundColor: "#F59E0B",
+    backgroundColor: "#94A3B8",
   },
   nextButtonText: {
     color: "#ffffff",
-    fontSize: 19,
+    fontSize: 24,
     fontWeight: "800",
-    letterSpacing: 0.2,
+    fontFamily: "LeagueSpartan_800ExtraBold",
   },
-  loadingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-})
+});

@@ -55,6 +55,10 @@ export interface WorkerInventory {
     workerId: number;
     inventoryId: number;
     totalPickedQuantity: number | null;
+    totalDeliveredQuantity?: number;
+    transferredInQuantity?: number;
+    transferredOutQuantity?: number;
+    availableQuantity?: number; // Computed by backend
     remainingQuantity: number | null;
     date: string;
     inventory: Inventory;
@@ -68,6 +72,8 @@ export interface CustomerProductRelation {
     fromDate: string;
     thruDate: string | null;
     product: Product;
+    effectivePrice: number;
+    isCustomPrice: boolean;
 }
 
 export interface DeliveredItem {
@@ -90,6 +96,9 @@ export interface CustomerForDelivery {
     deliveryConfirmed: boolean;
     sequenceNumber: number;
     associatedProductIds?: number[];
+    associatedProductPrices?: Record<number, { price: number, isCustom: boolean }>;
+    isPaid: boolean;
+    manualPayment?: number;
 }
 
 export interface OfflineQueueItem {
