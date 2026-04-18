@@ -3,12 +3,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Dimensions,
   FlatList,
   Image,
@@ -62,14 +63,14 @@ export default function CustomerDeliveryScreen() {
 
 
 
-  const markAsPaid = (customerId: number) => {
+  const markAsPaid = (customerId: number, amount: number) => {
     setCustomers((prev) => {
       const updated = prev.map((c) =>
         c.customerId === customerId
           ? {
             ...c,
             isPaid: true,
-            paymentReceived: c.manualPayment !== undefined ? c.manualPayment : c.paymentReceived,
+            paymentReceived: amount,
           }
           : c,
       );
@@ -137,6 +138,23 @@ export default function CustomerDeliveryScreen() {
       // Ignore specific scroll errors
     }
   }, [selectedIdx, customers]);
+
+  useFocusEffect(
+    useCallback(() => {
+      AsyncStorage.setItem("lastActiveScreen", "/CustomerDeliveryScreen").catch(() => {});
+      
+      const onBackPress = () => {
+        Alert.alert("Hold on!", "Are you sure you want to go back? Unsaved progress may be lost.", [
+          { text: "Cancel", onPress: () => null, style: "cancel" },
+          { text: "YES", onPress: () => router.replace("/MorningStockScreen") }
+        ]);
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+      return () => subscription.remove();
+    }, [])
+  );
 
   // Initial tab selection - Jump to first pending customer
   const hasInitialJumped = useRef(false);
@@ -260,6 +278,7 @@ export default function CustomerDeliveryScreen() {
           deliveredQuantity: item.qty,
           billAmount: billAmount,
           isPriceCustomized: item.isEdited,
+          isCollected: false, // Items are created as bills; consolidated payment handles collection for B2B
         };
 
         try {
@@ -288,6 +307,18 @@ export default function CustomerDeliveryScreen() {
         }
       }
 
+      // Record consolidated payment for B2B
+      if (isB2B && effectiveTotalPayment > 0) {
+        try {
+          await apiClient.post("/deliveries/b2b-payment", {
+            customerId: customer.customerId,
+            amount: effectiveTotalPayment,
+          });
+        } catch (payErr) {
+          console.error("Consolidated payment failed:", payErr);
+        }
+      }
+
       if (allSuccessful) {
         setConfirmationVisible(true);
         setTimeout(() => setConfirmationVisible(false), 50);
@@ -307,33 +338,17 @@ export default function CustomerDeliveryScreen() {
         });
       }
 
-      // Auto-collect for B2B if not already paid
-      if (isB2B && !customer.isPaid && totalAmount > 0) {
-        // Optimistic: Update UI immediately
-        markAsPaid(customer.customerId);
-
-        // Background API call
-        apiClient
-          .post("/deliveries/b2b-payment", {
-            customerId: customer.customerId,
-            amount: totalAmount,
-          })
-          .catch((err) => {
-            console.error("Auto-collect background failure:", err);
-            // We'll keep the UI as 'Paid' to avoid confusing the user
-          });
-      }
-
-      const finalPaidStatus = customer.isPaid || (isB2B && totalAmount > 0);
+      const finalPaidStatus = customer.isPaid || isB2B;
 
       // Mark as confirmed locally regardless (Optimistic UI)
       const updatedCustomers = [...customers];
+      const isActuallyPaid = isB2B && effectiveTotalPayment > 0;
       updatedCustomers[selectedIdx] = {
         ...updatedCustomers[selectedIdx],
         deliveredItems: itemsToDeliver,
         deliveryConfirmed: true,
-        paymentReceived: totalAmount,
-        isPaid: finalPaidStatus,
+        paymentReceived: isActuallyPaid ? effectiveTotalPayment : 0,
+        isPaid: isActuallyPaid,
       };
       setCustomers(updatedCustomers);
       await AsyncStorage.setItem(
@@ -654,7 +669,7 @@ export default function CustomerDeliveryScreen() {
 
         const baseQty =
           invItem.availableQuantity ?? invItem.totalPickedQuantity ?? 0;
-        const availableNow = baseQty - totalDeliveredByAllPending;
+        const availableNow = Math.max(0, baseQty - totalDeliveredByAllPending);
 
         if (qty > availableNow) {
           Toast.show({
@@ -1259,111 +1274,39 @@ export default function CustomerDeliveryScreen() {
                   );
                 })}
               </ScrollView>
-              {/* Payment Section (B2B only) */}
-              {isB2B && (
-                <View
-                  style={[
-                    styles.paymentSection,
-                    { marginHorizontal: 13, marginTop: 10 },
-                  ]}
-                >
-                  <View style={styles.paymentInputContainer}>
-                    <TextInput
-                      style={{
-                        fontSize: 20,
-                        fontWeight: "700",
-                        color: "#000",
-                        alignSelf: "center",
-                        minWidth: 80,
-                        textAlign: "center",
-                        borderBottomWidth: 1,
-                        borderColor: "#CBD5E1",
-                      }}
-                      editable={!customer.isPaid && !customer.deliveryConfirmed}
-                      value={effectiveTotalPayment.toFixed(2)}
-                      onChangeText={(val) => {
-                        const clean = val.replace(/[^0-9.]/g, "");
-                        const amount = parseFloat(clean) || 0;
-                        setCustomers(prev => prev.map(c => c.id === customer.id ? { ...c, manualPayment: amount } : c));
-                      }}
-                      keyboardType="numeric"
-                      placeholder="0.00"
-                    />
-                  </View>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.collectButton,
-                      (effectiveTotalPayment <= 0 ||
-                        !isDeliveryValid() ||
-                        customer.isPaid ||
-                        customer.deliveryConfirmed) && {
-                        backgroundColor: "#E2E8F0",
-                      },
-                    ]}
-                    disabled={
-                      effectiveTotalPayment <= 0 ||
-                      !isDeliveryValid() ||
-                      customer.isPaid ||
-                      customer.deliveryConfirmed
-                    }
-                    onPress={async () => {
-                      if (!customer || customer.isPaid || effectiveTotalPayment <= 0 || !isDeliveryValid())
-                        return;
-
-                      const amount = effectiveTotalPayment;
-
-                      // OPTIMISTIC UPDATE: Instant feedback for the user
-                      markAsPaid(customer.customerId);
-
-                      try {
-                        const response = (await apiClient.post(
-                          "/deliveries/b2b-payment",
-                          {
-                            customerId: customer.customerId,
-                            amount: amount,
-                          },
-                        )) as any;
-
-                        if (
-                          response.id ||
-                          response.customerId ||
-                          response.success
-                        ) {
-                          Toast.show({
-                            type: "success",
-                            text1: "Payment Collected",
-                            text2: `₹${amount} recorded`,
-                            visibilityTime: 1500,
-                          });
-                        } else {
-                          throw new Error("API reported failure");
-                        }
-                      } catch (err) {
-                        console.error("B2B Payment Error:", err);
-                        // We keep the state as isPaid:true since it's already recorded in offline potential
-                        Toast.show({
-                          type: "info",
-                          text1: "Payment Saved",
-                          text2: "Payment will sync when online",
-                          visibilityTime: 2000,
-                        });
-                      }
+              {isB2B && !customer.deliveryConfirmed && (
+                <View style={{ 
+                  margin: 15, 
+                  padding: 15, 
+                  backgroundColor: "#fff", 
+                  borderRadius: 12, 
+                  borderWidth: 2, 
+                  borderColor: "#590194",
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <TextInput
+                    style={{
+                      fontSize: 36,
+                      fontWeight: "900",
+                      color: "#590194",
+                      textAlign: 'center',
+                      width: '100%'
                     }}
-                  >
-                    <Text
-                      style={[
-                        styles.collectButtonText,
-                        (customer.isPaid || customer.deliveryConfirmed) && {
-                          color: "#94A3B8",
-                        },
-                      ]}
-                    >
-                      {customer.isPaid || customer.deliveryConfirmed
-                        ? "Collected"
-                        : "Collect"}
-                    </Text>
-                  </TouchableOpacity>
+                    keyboardType="numeric"
+                    value={effectiveTotalPayment.toFixed(2)}
+                    onChangeText={(val) => {
+                      const clean = val.replace(/[^0-9.]/g, "");
+                      const amount = parseFloat(clean) || 0;
+                      setCustomers((prev) =>
+                        prev.map((c) =>
+                          c.customerId === customer.customerId
+                            ? { ...c, manualPayment: amount }
+                            : c
+                        )
+                      );
+                    }}
+                  />
                 </View>
               )}
             </View>
@@ -1397,9 +1340,16 @@ export default function CustomerDeliveryScreen() {
             onPress={confirmDelivery}
             disabled={processingDelivery}
           >
-            <Text style={styles.confirmButtonText}>
-              {processingDelivery ? "Processing..." : "Confirm"}
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              {!processingDelivery && <Ionicons name="checkmark-done-circle" size={26} color="#fff" />}
+              <Text style={styles.confirmButtonText}>
+                {processingDelivery
+                  ? "Processing..."
+                  : isB2B
+                    ? "Confirm & Collect Cash"
+                    : "Confirm Delivery"}
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
       )}

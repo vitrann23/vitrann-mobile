@@ -14,6 +14,7 @@ import {
   Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import Toast from "react-native-toast-message";
 import apiClient from "../services/apiClient";
@@ -117,26 +118,30 @@ export default function DetailedPreviewScreen() {
     }));
   };
 
-  // ✅ FIX: Handle update by distributing payment across products (first one gets total, others 0)
+  // ✅ FIX: Handle update by separating product quantities from consolidated payment
   const handleUpdate = async (customer: CustomerDetail) => {
+    const actualTotalCollected = customer.payments.reduce(
+      (sum, p) => sum + Number(p.amount),
+      0
+    );
+
     try {
       setLoading(true);
       const updatePromises = customer.deliveries
-        .map((d, index) => {
+        .map((d) => {
           const buffer = editBuffers[d.inventoryId];
           if (!buffer) return null;
 
-          // For payment: first item gets the total edited amount, others get 0
-          // to maintain backend consistency while providing customer-level control.
-          const paymentAmount = index === 0 ? parseFloat(editTotalAmount) : 0;
-          const paymentCollected = editIsCollected;
+          // Per-item bill is just qty * original_price
+          const newQty = parseInt(buffer.quantity);
+          const newBill = d.price * newQty;
 
           return apiClient.post("/deliveries/update-item", {
             customerId: customer.customerId,
             inventoryId: d.inventoryId,
-            deliveredQuantity: parseInt(buffer.quantity),
-            billAmount: paymentAmount,
-            isCollected: paymentCollected,
+            deliveredQuantity: newQty,
+            billAmount: newBill,
+            isCollected: customer.classification === "B2B", // Auto-collected if B2B
           });
         })
         .filter(Boolean);
@@ -144,6 +149,30 @@ export default function DetailedPreviewScreen() {
       const results = (await Promise.all(updatePromises)) as any[];
 
       if (results.every((r) => r.success)) {
+        // Sync local storage for immediate summary update
+        try {
+          const offlineData = await AsyncStorage.getItem("offline_customers");
+          if (offlineData) {
+            let custs = JSON.parse(offlineData);
+            const idx = custs.findIndex((c: any) => c.customerId === customer.customerId);
+            if (idx !== -1) {
+              // Update items
+              custs[idx].deliveredItems = custs[idx].deliveredItems.map((item: any) => {
+                const buffer = editBuffers[item.inventoryId];
+                if (buffer) return { ...item, qty: parseInt(buffer.quantity), price: item.originalPrice * parseInt(buffer.quantity) };
+                return item;
+              });
+              // Update paymentReceived
+              custs[idx].paymentReceived = parseFloat(editTotalAmount);
+              custs[idx].isPaid = (parseFloat(editTotalAmount) > 0);
+              
+              await AsyncStorage.setItem("offline_customers", JSON.stringify(custs));
+            }
+          }
+        } catch (syncErr) {
+          console.error("Local sync failed", syncErr);
+        }
+
         Toast.show({ type: "success", text1: "Updated Successfully" });
         setEditingId(null);
         fetchReport();
@@ -166,7 +195,7 @@ export default function DetailedPreviewScreen() {
       <SafeAreaView style={styles.container}>
         <ActivityIndicator
           size="large"
-          color="#0C6CDE"
+          color="#590194"
           style={{ marginTop: 50 }}
         />
       </SafeAreaView>
@@ -191,6 +220,12 @@ export default function DetailedPreviewScreen() {
           const actualTotalCollected = customer.payments
             .filter((p) => p.isCollected)
             .reduce((sum, p) => sum + Number(p.amount), 0);
+
+          const actualTotalBill = customer.deliveries.reduce((sum, d) => {
+            const buffer = editBuffers[d.inventoryId];
+            const qty = isEditing && buffer ? parseInt(buffer.quantity) : d.quantity;
+            return sum + (d.price * (qty || 0));
+          }, 0);
 
           return (
             <View key={customer.customerId} style={styles.card}>
@@ -246,57 +281,33 @@ export default function DetailedPreviewScreen() {
                 })}
 
                 <View style={styles.paymentFooter}>
-                  {isEditing ? (
-                    <View style={styles.footerEditSection}>
-                      <View style={styles.amountInputRow}>
-                        <Text style={styles.footerLabel}>
-                          Total Collected ₹:
-                        </Text>
-                        <TextInput
-                          style={styles.priceInputLarge}
-                          keyboardType="numeric"
-                          value={editTotalAmount}
-                          onChangeText={setEditTotalAmount}
-                        />
-                      </View>
-                      <TouchableOpacity
-                        style={[
-                          styles.statusToggle,
-                          editIsCollected && styles.statusToggleActive,
-                        ]}
-                        onPress={() => setEditIsCollected(!editIsCollected)}
-                      >
-                        <Text style={styles.statusToggleText}>
-                          {editIsCollected ? "Collected" : "Pending"}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
                     <View
                       style={[
                         styles.amountBox,
                         {
                           borderColor:
-                            actualTotalCollected > 0 ? "#16A34A" : "#64748B",
+                            customer.classification === "B2B" ? "#16A34A" : "#64748B",
                         },
                       ]}
                     >
-                      <Text style={styles.amountLabel}>Pay Status:</Text>
+                      <Text style={styles.amountLabel}>
+                        {customer.classification === "B2B" ? "Amount Collected:" : "Bill Amount:"}
+                      </Text>
                       <Text
                         style={[
                           styles.amountText,
                           {
                             color:
-                              actualTotalCollected > 0 ? "#16A34A" : "#64748B",
+                              customer.classification === "B2B" ? "#16A34A" : "#64748B",
                           },
                         ]}
                       >
-                        {actualTotalCollected > 0
-                          ? `₹${actualTotalCollected} Collected`
-                          : "Pending"}
+                        {customer.classification === "B2B" 
+                          ? `₹${actualTotalBill.toFixed(2)}`
+                          : `₹${actualTotalBill.toFixed(2)} Pending`
+                        }
                       </Text>
                     </View>
-                  )}
 
                   <View style={styles.footerActionRow}>
                     {isEditing ? (
@@ -345,10 +356,11 @@ const styles = StyleSheet.create({
   },
   searchBar: {
     backgroundColor: "#F1F5F9",
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
     fontSize: 16,
+    fontFamily: "LeagueSpartan_600SemiBold",
     color: "#1E293B",
   },
   scrollContent: {
@@ -357,16 +369,16 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: "#0C6CDE",
+    borderColor: "#590194",
     marginBottom: 20,
     overflow: "hidden",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+    shadowColor: "#590194",
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
   },
   cardHeader: {
     flexDirection: "row",
@@ -377,20 +389,20 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
   },
   customerName: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 20,
+    fontFamily: "LeagueSpartan_700Bold",
     color: "#1E293B",
   },
   customerTypeBadge: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#64748B",
-    fontWeight: "600",
+    fontFamily: "LeagueSpartan_600SemiBold",
     marginTop: 2,
   },
   customerId: {
     fontSize: 12,
     color: "#94A3B8",
-    fontWeight: "600",
+    fontFamily: "LeagueSpartan_700Bold",
   },
   cardBody: {
     padding: 12,
@@ -410,27 +422,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   productName: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 18,
+    fontFamily: "LeagueSpartan_600SemiBold",
     color: "#1E293B",
   },
   productPrice: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#64748B",
+    fontFamily: "LeagueSpartan_500Medium",
   },
   qtyDisplay: {
     alignItems: "flex-end",
   },
   qtyText: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#0C6CDE",
+    fontSize: 24,
+    fontFamily: "LeagueSpartan_800ExtraBold",
+    color: "#590194",
   },
   qtySubText: {
-    fontSize: 10,
+    fontSize: 11,
     color: "#94A3B8",
     textTransform: "uppercase",
-    fontWeight: "700",
+    fontFamily: "LeagueSpartan_700Bold",
   },
   inputGroup: {
     flexDirection: "row",
@@ -438,21 +451,21 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   inputLabel: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 15,
+    fontFamily: "LeagueSpartan_700Bold",
     color: "#64748B",
   },
   qtyInput: {
     backgroundColor: "#fff",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderWidth: 1.5,
-    borderColor: "#0C6CDE",
-    width: 60,
+    borderColor: "#590194",
+    width: 65,
     textAlign: "center",
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 18,
+    fontFamily: "LeagueSpartan_700Bold",
     color: "#1E293B",
   },
   paymentFooter: {
@@ -475,53 +488,53 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   footerLabel: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 15,
+    fontFamily: "LeagueSpartan_700Bold",
     color: "#1E293B",
   },
   priceInputLarge: {
     backgroundColor: "#fff",
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderWidth: 1.5,
     borderColor: "#16A34A",
-    width: 100,
-    fontSize: 18,
-    fontWeight: "800",
+    width: 110,
+    fontSize: 20,
+    fontFamily: "LeagueSpartan_800ExtraBold",
     color: "#16A34A",
   },
   statusToggle: {
     backgroundColor: "#E2E8F0",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
   statusToggleActive: {
     backgroundColor: "#DCFCE7",
   },
   statusToggleText: {
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 14,
+    fontFamily: "LeagueSpartan_800ExtraBold",
     color: "#16A34A",
   },
   amountBox: {
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     backgroundColor: "#F1F5F9",
-    marginBottom: 12,
+    marginBottom: 14,
   },
   amountLabel: {
-    fontSize: 10,
+    fontSize: 11,
     color: "#64748B",
-    fontWeight: "700",
+    fontFamily: "LeagueSpartan_700Bold",
     textTransform: "uppercase",
   },
   amountText: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 18,
+    fontFamily: "LeagueSpartan_800ExtraBold",
   },
   footerActionRow: {
     flexDirection: "row",
@@ -529,46 +542,46 @@ const styles = StyleSheet.create({
   },
   editBtn: {
     backgroundColor: "#FBBF24",
-    borderRadius: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    borderRadius: 10,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
   },
   editBtnText: {
     color: "#fff",
-    fontWeight: "800",
-    fontSize: 14,
+    fontFamily: "LeagueSpartan_800ExtraBold",
+    fontSize: 15,
   },
   updateBtn: {
-    backgroundColor: "#0C6CDE",
-    borderRadius: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
+    backgroundColor: "#590194",
+    borderRadius: 10,
+    paddingHorizontal: 26,
+    paddingVertical: 12,
   },
   updateBtnText: {
     color: "#fff",
-    fontWeight: "800",
-    fontSize: 14,
+    fontFamily: "LeagueSpartan_800ExtraBold",
+    fontSize: 15,
   },
   satisfiedBtn: {
     position: "absolute",
-    bottom: 20,
+    bottom: 25,
     left: 20,
     right: 20,
-    backgroundColor: "#17A34C",
-    height: 60,
-    borderRadius: 12,
+    backgroundColor: "#590194",
+    height: 64,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
     elevation: 8,
-    shadowColor: "#17A34C",
-    shadowOpacity: 0.3,
+    shadowColor: "#590194",
+    shadowOpacity: 0.35,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
   },
   satisfiedText: {
     color: "#fff",
-    fontSize: 22,
-    fontWeight: "900",
+    fontSize: 24,
+    fontFamily: "LeagueSpartan_800ExtraBold",
     letterSpacing: 0.5,
   },
 });

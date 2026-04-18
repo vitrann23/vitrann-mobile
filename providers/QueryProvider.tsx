@@ -5,10 +5,11 @@ import { ReactNode } from 'react';
 const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
-            staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh
-            gcTime: 30 * 60 * 1000, // 30 minutes - garbage collection time
+            staleTime: 0, // Always fetch fresh
+            gcTime: 0, // No garbage collection caching
             retry: 2, // Retry failed requests twice
-            refetchOnWindowFocus: false, // Don't refetch on app focus (mobile)
+            refetchOnWindowFocus: true, // Refetch on app focus
+            refetchOnMount: true, // Refetch deeply on unmount/mount
             refetchOnReconnect: true, // Refetch when network reconnects
         },
         mutations: {

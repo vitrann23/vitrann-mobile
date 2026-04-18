@@ -3,10 +3,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter, Stack } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  BackHandler,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -92,6 +95,20 @@ export default function DailySummaryScreen() {
   // Refresh data whenever screen comes into focus
   useFocusEffect(
     useCallback(() => {
+      AsyncStorage.setItem("lastActiveScreen", "/DailySummaryScreen").catch(() => {});
+      
+      const onBackPress = () => {
+        router.replace("/CashDetailsScreen");
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+      return () => subscription.remove();
+    }, [])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
       fetchAllData();
     }, []),
   );
@@ -107,9 +124,18 @@ export default function DailySummaryScreen() {
         apiClient.get("/deliveries/total-amount"),
       ])) as any[];
 
+      let localPaymentTotal = 0;
+      try {
+        const offlineData = await AsyncStorage.getItem("offline_customers");
+        if (offlineData) {
+          const custs = JSON.parse(offlineData);
+          localPaymentTotal = custs.reduce((sum: number, c: any) => sum + (Number(c.paymentReceived) || 0), 0);
+        }
+      } catch (err) {}
+
       // Process summary data
       if (summaryResponse.success && summaryResponse.data) {
-        setSummaryData(summaryResponse.data);
+        setSummaryData({ ...summaryResponse.data, paymentFromCustomer: localPaymentTotal });
       }
 
       // Process cash record
@@ -142,7 +168,11 @@ export default function DailySummaryScreen() {
 
   const handleLogout = async () => {
     try {
-      await SecureStore.deleteItemAsync("authToken");
+      if (Platform.OS !== 'web') {
+        await SecureStore.deleteItemAsync("authToken");
+      } else {
+        await AsyncStorage.removeItem("authToken"); // Fallback for web
+      }
       await AsyncStorage.multiRemove(["workerId", "workerName", "userType"]);
       router.replace("/");
       Toast.show({
@@ -152,13 +182,9 @@ export default function DailySummaryScreen() {
         visibilityTime: 1500,
       });
     } catch (e) {
-      console.error("Logout failed", e);
-      Toast.show({
-        type: "error",
-        text1: "Logout Failed",
-        text2: "Please try again",
-        visibilityTime: 2000,
-      });
+      console.log("Caught logout error:", e);
+      // Fallback redirect even if secure store fails
+      router.replace("/");
     }
   };
 
@@ -182,7 +208,7 @@ export default function DailySummaryScreen() {
 
         // Navigate to home or login screen
         setTimeout(() => {
-          router.replace("/");
+          handleLogout();
         }, 2000);
       } else {
         throw new Error(response.message || "Failed to submit summary");
