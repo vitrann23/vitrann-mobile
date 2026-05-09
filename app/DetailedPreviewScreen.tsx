@@ -4,19 +4,16 @@ import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import Toast from "react-native-toast-message";
+import { KeyboardAwareScrollView } from "../components/KeyboardAwareScrollView";
 import apiClient from "../services/apiClient";
 
 // Types
@@ -42,12 +39,103 @@ type CustomerDetail = {
   payments: PaymentItem[];
 };
 
+const toNumber = (value: any, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const buildPreviewFromLocalCache = async (): Promise<CustomerDetail[]> => {
+  const [customersRaw, inventoryRaw] = await Promise.all([
+    AsyncStorage.getItem("offline_customers"),
+    AsyncStorage.getItem("offline_inventory"),
+  ]);
+
+  if (!customersRaw) return [];
+
+  const customers = JSON.parse(customersRaw);
+  const inventory = inventoryRaw ? JSON.parse(inventoryRaw) : [];
+  const inventoryByProductId = new Map<number, number>();
+
+  if (Array.isArray(inventory)) {
+    inventory.forEach((item: any) => {
+      const productId = toNumber(item?.inventory?.product?.productId);
+      const inventoryId = toNumber(
+        item?.inventoryId ?? item?.inventory?.inventoryId,
+      );
+
+      if (productId && inventoryId) {
+        inventoryByProductId.set(productId, inventoryId);
+      }
+    });
+  }
+
+  if (!Array.isArray(customers)) return [];
+
+  return customers
+    .filter(
+      (customer: any) =>
+        Array.isArray(customer?.deliveredItems) &&
+        customer.deliveredItems.length > 0,
+    )
+    .map((customer: any, customerIndex: number) => {
+      const deliveries = customer.deliveredItems.map(
+        (item: any, itemIndex: number) => {
+          const productId = toNumber(item?.productId);
+          const quantity = toNumber(
+            item?.qty ?? item?.quantity ?? item?.deliveredQuantity,
+          );
+          const totalPrice = toNumber(item?.price ?? item?.billAmount);
+          const unitPrice = toNumber(
+            item?.originalPrice,
+            quantity > 0 ? totalPrice / quantity : totalPrice,
+          );
+
+          return {
+            id: itemIndex + 1,
+            inventoryId:
+              toNumber(item?.inventoryId) ||
+              inventoryByProductId.get(productId) ||
+              productId ||
+              itemIndex + 1,
+            productName: item?.name ?? item?.productName ?? "Product",
+            quantity,
+            price: unitPrice,
+          };
+        },
+      );
+
+      const paymentAmount = toNumber(
+        customer?.paymentReceived ?? customer?.manualPayment,
+      );
+
+      return {
+        customerId: toNumber(customer?.customerId, customerIndex + 1),
+        customerName: customer?.name ?? customer?.customerName ?? "Customer",
+        classification: customer?.type ?? customer?.classification ?? "B2C",
+        deliveries,
+        payments:
+          paymentAmount > 0
+            ? [
+                {
+                  id: 1,
+                  amount: paymentAmount,
+                  isCollected: Boolean(customer?.isPaid),
+                },
+              ]
+            : [],
+      };
+    });
+};
+
 export default function DetailedPreviewScreen() {
   const router = useRouter();
   const [data, setData] = useState<CustomerDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [emptyMessage, setEmptyMessage] = useState(
+    "No detailed delivery data available",
+  );
 
   // ✅ FIX: State map for individual product quantities
   const [editBuffers, setEditBuffers] = useState<{
@@ -67,26 +155,48 @@ export default function DetailedPreviewScreen() {
       const response = (await apiClient.get(
         "/deliveries/detailed-report",
       )) as any;
-      if (response.success) {
-        setData(response.data);
+
+      const apiReport = Array.isArray(response?.data) ? response.data : [];
+
+      if (response.success && apiReport.length > 0) {
+        setData(apiReport);
+        setEmptyMessage("");
+        return;
       }
+
+      const cachedReport = await buildPreviewFromLocalCache();
+      setData(cachedReport);
+      setEmptyMessage(
+        cachedReport.length > 0
+          ? ""
+          : "No local delivery data found. Confirm at least one delivery first.",
+      );
     } catch (error) {
-      console.error("Error fetching detailed report:", error);
-      Toast.show({
-        type: "error",
-        text1: "Fetch Failed",
-        text2: "Could not load detailed delivery data",
-      });
+      const cachedReport = await buildPreviewFromLocalCache();
+
+      if (cachedReport.length > 0) {
+        setData(cachedReport);
+        setEmptyMessage("");
+      } else {
+        console.error("Error fetching detailed report:", error);
+        setData([]);
+        setEmptyMessage("Could not load detailed delivery data");
+        Toast.show({
+          type: "error",
+          text1: "Fetch Failed",
+          text2: "Could not load detailed delivery data",
+        });
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const filteredData = useMemo(() => {
-    return data
+    return (Array.isArray(data) ? data : [])
       .filter(
         (c) =>
-          c.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          c.customerName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
           c.customerId.toString().includes(searchQuery),
       )
       .sort((a, b) => a.customerId - b.customerId);
@@ -226,7 +336,16 @@ export default function DetailedPreviewScreen() {
         />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scrollContent}>
+        {filteredData.length === 0 && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>No Preview Data</Text>
+            <Text style={styles.emptyText}>
+              {searchQuery ? "No customers match your search" : emptyMessage}
+            </Text>
+          </View>
+        )}
+
         {filteredData.map((customer) => {
           const isEditing = editingId === customer.customerId;
           const actualTotalCollected = customer.payments
@@ -343,7 +462,7 @@ export default function DetailedPreviewScreen() {
             </View>
           );
         })}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <TouchableOpacity
         style={styles.satisfiedBtn}
@@ -378,6 +497,26 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
     paddingBottom: 100,
+  },
+  emptyState: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 24,
+    alignItems: "center",
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontFamily: "LeagueSpartan_800ExtraBold",
+    color: "#1E293B",
+    marginBottom: 6,
+  },
+  emptyText: {
+    fontSize: 15,
+    fontFamily: "LeagueSpartan_600SemiBold",
+    color: "#64748B",
+    textAlign: "center",
   },
   card: {
     backgroundColor: "#fff",

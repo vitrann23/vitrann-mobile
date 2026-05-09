@@ -5,21 +5,16 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  ScrollView,
   Image,
-  KeyboardAvoidingView,
-  Platform,
   StatusBar,
   RefreshControl,
 } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import Toast from "react-native-toast-message";
+import { KeyboardAwareScrollView } from "../components/KeyboardAwareScrollView";
 import apiClient from "../services/apiClient";
 import { useInventory } from "../hooks/useInventory";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -52,7 +47,6 @@ type TabType = "ADD" | "TRANSFER" | "PURCHASE";
 export default function InventoryManagementScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const insets = useSafeAreaInsets();
   const {
     customerName,
     workerName: currentWorkerName,
@@ -377,17 +371,13 @@ export default function InventoryManagementScreen() {
         </View>
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      <KeyboardAwareScrollView
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
           <View style={styles.inventoryContainer}>
             {/* Header section with Dropdown (Visible only in TRANSFER tab) */}
             <View style={styles.dropdownWrapper}>
@@ -579,8 +569,7 @@ export default function InventoryManagementScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

@@ -3,7 +3,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import * as SecureStore from "expo-secure-store";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -23,6 +22,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import apiClient from "../services/apiClient";
+import { clearAuthSession } from "../utils/authSession";
 import { getProductImageSource } from "../utils/productImages";
 
 interface Product {
@@ -151,13 +151,7 @@ const MorningStockScreen = () => {
 
   const handleLogout = async () => {
     try {
-      if (Platform.OS === "web") {
-        await AsyncStorage.removeItem("authToken");
-        await AsyncStorage.removeItem("workerId");
-      } else {
-        await SecureStore.deleteItemAsync("authToken");
-        await SecureStore.deleteItemAsync("workerId");
-      }
+      await clearAuthSession();
       router.replace("/");
     } catch (error) {
       console.error("Logout error:", error);
@@ -242,7 +236,7 @@ const MorningStockScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
       >
@@ -264,6 +258,12 @@ const MorningStockScreen = () => {
             <ScrollView
               // style={styles.productsMain}
               contentContainerStyle={styles.productsContainer}
+              automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+              contentInsetAdjustmentBehavior="automatic"
+              keyboardDismissMode={
+                Platform.OS === "ios" ? "interactive" : "on-drag"
+              }
+              keyboardShouldPersistTaps="handled"
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -481,6 +481,12 @@ const styles = StyleSheet.create({
 
   inputWrapper: {
     justifyContent: "center",
+    alignItems: "center",
+    width: 96,
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: "#FF3B30",
+    flexShrink: 0,
   },
   input: {
     width: 80,
@@ -492,7 +498,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     color: "#0F172A",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#FFF4C2",
   },
   inputActive: {
     borderColor: "#3880FF",

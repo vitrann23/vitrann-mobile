@@ -1,7 +1,6 @@
 "use client";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
 import { useFocusEffect, useLocalSearchParams, useRouter, Stack } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -9,7 +8,6 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import apiClient from "../services/apiClient";
+import { clearAuthSession } from "../utils/authSession";
 
 // Types
 type ProductSummary = { [name: string]: number };
@@ -168,12 +167,7 @@ export default function DailySummaryScreen() {
 
   const handleLogout = async () => {
     try {
-      if (Platform.OS !== 'web') {
-        await SecureStore.deleteItemAsync("authToken");
-      } else {
-        await AsyncStorage.removeItem("authToken"); // Fallback for web
-      }
-      await AsyncStorage.multiRemove(["workerId", "workerName", "userType"]);
+      await clearAuthSession();
       router.replace("/");
       Toast.show({
         type: "success",

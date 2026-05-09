@@ -4,7 +4,6 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -30,6 +29,7 @@ import {
 } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import apiClient from "../services/apiClient";
+import { clearAuthSession } from "../utils/authSession";
 import { getProductImageSource } from "../utils/productImages";
 import { ProductDeliveryModal } from "./CDS/ProductDeliveryModal";
 
@@ -205,13 +205,7 @@ export default function CustomerDeliveryScreen() {
 
   const handleLogout = async () => {
     try {
-      if (Platform.OS === "web") {
-        await AsyncStorage.removeItem("authToken");
-        await AsyncStorage.removeItem("workerId");
-      } else {
-        await SecureStore.deleteItemAsync("authToken");
-        await SecureStore.deleteItemAsync("workerId");
-      }
+      await clearAuthSession();
       router.replace("/");
     } catch (error) {
       console.error("Logout error:", error);
@@ -1026,6 +1020,10 @@ export default function CustomerDeliveryScreen() {
             styles.scrollViewContent,
             { paddingBottom: 100 },
           ]}
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+          contentInsetAdjustmentBehavior="automatic"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.customerCard}>
@@ -1052,6 +1050,12 @@ export default function CustomerDeliveryScreen() {
             <View style={styles.productsListWrapper}>
               <ScrollView
                 contentContainerStyle={styles.productsListContainer}
+                automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+                contentInsetAdjustmentBehavior="automatic"
+                keyboardDismissMode={
+                  Platform.OS === "ios" ? "interactive" : "on-drag"
+                }
+                keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
                 {allProducts.map((item, idx) => {

@@ -11,8 +11,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as SecureStore from "expo-secure-store";
+import { clearAuthSession } from "../utils/authSession";
 
 export default function EntriesSubmitted() {
   const router = useRouter();
@@ -21,14 +20,7 @@ export default function EntriesSubmitted() {
 
   const handleLogout = async () => {
     try {
-      if (Platform.OS === "web") {
-        await AsyncStorage.removeItem("authToken");
-        await AsyncStorage.removeItem("workerId");
-      } else {
-        await SecureStore.deleteItemAsync("authToken");
-        await SecureStore.deleteItemAsync("workerId");
-      }
-      await AsyncStorage.multiRemove(["workerName", "userType"]);
+      await clearAuthSession();
       router.replace("/");
     } catch (error) {
       console.error("Logout error:", error);

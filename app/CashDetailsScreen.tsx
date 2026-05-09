@@ -7,9 +7,6 @@ import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,11 +15,9 @@ import {
   StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
+import { KeyboardAwareScrollView } from "../components/KeyboardAwareScrollView";
 import apiClient from "../services/apiClient";
 
 const notes = [
@@ -52,7 +47,6 @@ const submitTotalAmount = async (amount: number) => {
 export default function CashDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const insets = useSafeAreaInsets();
 
   const maxCashAmount = params.maxCashAmount ? Number(params.maxCashAmount) : 0;
 
@@ -227,17 +221,11 @@ export default function CashDetailsScreen() {
         <Text style={styles.headerTitle}>Cash Details</Text>
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.content}
+        extraBottomPadding={20}
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 20 },
-          ]}
-          showsVerticalScrollIndicator={false}
-        >
           <View style={styles.introContainer}>
             <Text style={styles.introTitle}>Enter Cash Details</Text>
           </View>
@@ -268,8 +256,7 @@ export default function CashDetailsScreen() {
               <Text style={styles.nextButtonText}>Enter</Text>
             )}
           </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

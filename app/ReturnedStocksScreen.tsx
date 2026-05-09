@@ -315,7 +315,7 @@ export default function ReturnedStocksScreen() {
     <SafeAreaView style={styles.wrapper}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         {/* Success message */}
         <View style={styles.cheerBox}>
@@ -340,7 +340,10 @@ export default function ReturnedStocksScreen() {
             ListEmptyComponent={
               <Text style={styles.empty}>No products found.</Text>
             }
-            contentContainerStyle={{ paddingTop: 12 }}
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+            contentInsetAdjustmentBehavior="automatic"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            contentContainerStyle={{ paddingTop: 12, paddingBottom: 140 }}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           />

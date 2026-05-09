@@ -2,7 +2,9 @@ import React, { useState } from "react";
 
 import {
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -195,6 +197,10 @@ export const ProductDeliveryModal: React.FC<ProductDeliveryModalProps> = ({
     <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.fullModalOverlay}>
         <View style={styles.fullModal}>
+          <KeyboardAvoidingView
+            style={styles.modalKeyboardView}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+          >
           {/* Header */}
           <View style={styles.modalHeader}>
             <Text style={styles.modalHeading}>Add Other Products</Text>
@@ -220,6 +226,10 @@ export const ProductDeliveryModal: React.FC<ProductDeliveryModalProps> = ({
           <ScrollView
             style={styles.modalBody}
             contentContainerStyle={{ paddingBottom: 120 }}
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+            contentInsetAdjustmentBehavior="automatic"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            keyboardShouldPersistTaps="handled"
           >
             {customer.deliveryConfirmed ? (
               <View style={styles.emptyStateContainer}>
@@ -356,6 +366,7 @@ export const ProductDeliveryModal: React.FC<ProductDeliveryModalProps> = ({
               <Text style={styles.doneButtonText}>Done</Text>
             </TouchableOpacity>
           </View>
+          </KeyboardAvoidingView>
         </View>
       </View>
     </Modal>
@@ -375,6 +386,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     overflow: "hidden",
     marginTop: 40, // Add top margin so it doesn't fill entire screen
+  },
+  modalKeyboardView: {
+    flex: 1,
   },
   modalBody: {
     flex: 1,
