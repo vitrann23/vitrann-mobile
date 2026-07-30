@@ -120,6 +120,36 @@ export default function Index() {
           `${data.worker.firstName} ${data.worker.lastName}`,
         );
 
+        // Check if cash has already been submitted for today
+        try {
+          const cashCheckResponse = await fetch(`${API_BASE_URL}/deliveries/total-amount`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${data.token}`,
+            },
+          });
+          
+          const cashData = await cashCheckResponse.json();
+          
+          // If cash record exists for today, redirect to day completed screen
+          if (cashData.success && cashData.data && cashData.data.amount !== undefined) {
+            Toast.show({
+              type: 'info',
+              text1: 'Day Already Completed',
+              text2: 'You have already submitted cash for today.',
+            });
+
+            setTimeout(() => {
+              router.replace('/DayCompletedScreen');
+            }, 1200);
+            return;
+          }
+        } catch (cashCheckError) {
+          // If check fails, continue with normal login flow
+          console.log('Cash check failed, proceeding with login:', cashCheckError);
+        }
+
         Toast.show({
           type: "success",
           text1: "Login Successful",
